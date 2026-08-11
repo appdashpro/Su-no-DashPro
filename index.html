@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Suíno DashPro</title>
+    <script>
+      window.addEventListener('error', function(e) {
+        console.log('CRITICAL_ERROR:', e.message, e.filename, e.lineno);
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        console.log('CRITICAL_REJECTION:', e.reason);
+      });
+      
+      const originalConsoleError = console.error;
+      console.error = function(...args) {
+        console.log('CONSOLE_ERROR:', ...args);
+        originalConsoleError.apply(console, args);
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "entities": {
+    "Integrado": {
+      "title": "Integrado",
+      "description": "Lote/Integrado data",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "loteNumber": { "type": "string" },
+        "alojamentoDate": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["Em andamento", "Fechado"] },
+        "fechamentoDate": { "type": "string", "format": "date" }
+      },
+      "required": ["name", "alojamentoDate", "status"]
+    },
+    "Visit": {
+      "title": "Visit",
+      "description": "Visit records",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "integradoId": { "type": "string" },
+        "idade": { "type": "number" },
+        "recomendacao": { "type": "string" },
+        "comedouro": { "type": "string", "enum": ["Linear", "Automático", "Misto"] },
+        "colaborador": { "type": "string" },
+        "consumoAcumuladoReal": { "type": "number" },
+        "mortalidade": { "type": "number" }
+      },
+      "required": ["date", "integradoId", "idade", "recomendacao", "comedouro", "colaborador", "consumoAcumuladoReal"]
+    }
+  },
+  "firestore": {
+    "integrados": {
+      "schema": "#/entities/Integrado",
+      "description": "Collection of integrados"
+    },
+    "visits": {
+      "schema": "#/entities/Visit",
+      "description": "Collection of visits"
+    }
+  }
+}
