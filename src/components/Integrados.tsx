@@ -139,7 +139,8 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
             <thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200 sticky top-0 z-20 shadow-sm">
               <tr>
                 <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Lote</th>
-                <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Nome</th>
+                <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Cliente</th>
+                <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Produtor</th>
                 <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Status Lote</th>
                 <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Alojamento/Fech.</th>
                 <th className="px-3 py-2 text-xs text-right whitespace-nowrap bg-slate-50">Idade</th>
@@ -209,6 +210,9 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
                       ) : (
                         i.loteNumber || '-'
                       )}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-slate-600">
+                      {i.empresaName || '-'}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-900">
                       {editingId === i.id ? (

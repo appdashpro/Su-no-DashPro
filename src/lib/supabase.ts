@@ -1,23 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Sanitize URL in case user accidentally added /rest/v1 or trailing slashes in the env var
-let supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co').trim();
-try {
-  const urlObj = new URL(supabaseUrl);
-  supabaseUrl = `${urlObj.protocol}//${urlObj.host}`;
-} catch (e) {
-  // Ignore if invalid URL
-}
-
-const supabaseKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || 'public-anon-key').trim();
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cnemtndccfppibecjuep.supabase.co';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_DhXoLwRfFz1txE63iFDdUg_TivovFvj';
 
 const customFetch = async (...args: any[]) => {
   try {
     return await fetch(...(args as [RequestInfo, RequestInit?]));
   } catch (error: any) {
-    console.warn('Network request dropped (handled by offline mode):', args[0]);
     // Treat any error during fetch as an offline/network error to avoid throwing objects that crash the app
-    return new Response(JSON.stringify({ error: 'offline', message: 'Failed to fetch', details: error.toString() }), {
+    return new Response(JSON.stringify({ error: 'offline', message: 'Failed to fetch' }), {
       status: 502,
       statusText: 'Bad Gateway',
       headers: { 'Content-Type': 'application/json' }

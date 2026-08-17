@@ -15,12 +15,22 @@ import { ImportData } from './components/ImportData';
 import { Login } from './components/Login';
 import { Notifications } from './components/Notifications';
 import { MedicationAnalysis } from './components/MedicationAnalysis';
-import { Visit, Integrado } from './types';
-import { Menu, X, LogOut, Download, Wifi, WifiOff, RefreshCw, Moon, Sun, Users, ClipboardList } from 'lucide-react';
+import { UsuariosGestao } from './components/UsuariosGestao';
+import { Visit, Integrado, UserProfile, getRoleLabel } from './types';
+import { Menu, X, LogOut, Download, Wifi, WifiOff, RefreshCw, Moon, Sun, Users, ClipboardList, Shield } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { storage } from './lib/storage';
 import { supabase } from './lib/supabase';
 import { saveBackupToIndexedDB } from './lib/backup';
+import { 
+  getSavedUserProfile, 
+  saveUserProfile, 
+  resolveUserProfile, 
+  cacheAuthSession, 
+  clearAuthCache, 
+  filterIntegradosForUser, 
+  filterVisitsForUser 
+} from './lib/auth';
 
 // Exponential backoff helper for network requests
 async function executeWithExponentialBackoff<T>(
@@ -81,9 +91,10 @@ export default function App() {
  
  const [integrados, setIntegrados] = useState<Integrado[]>([]);
  const [visits, setVisits] = useState<Visit[]>([]);
-  const [pendingSyncIds, setPendingSyncIds] = useState<string[]>([]);
+ const [pendingSyncIds, setPendingSyncIds] = useState<string[]>([]);
  const [loading, setLoading] = useState(true);
  const [session, setSession] = useState<any>(null);
+ const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(() => getSavedUserProfile());
  const [dbError, setDbError] = useState<string | null>(null);
  const [runTutorial, setRunTutorial] = useState(() => {
  if (typeof window !== 'undefined') {
@@ -277,54 +288,79 @@ export default function App() {
  };
 
  useEffect(() => {
- const handleOfflineLogin = () => {
- setSession({ user: { id: 'offline' } });
- loadData();
+ const handleOfflineLogin = (e?: Event) => {
+   const customEvent = e as CustomEvent;
+   const profile = customEvent?.detail?.profile || getSavedUserProfile() || {
+     id: 'offline_user',
+     email: 'campo@suinodashpro.com',
+     nome: 'Técnico de Campo',
+     papel: 'TECNICO_NUTRON' as const
+   };
+   setCurrentUserProfile(profile);
+   setSession({ user: { id: profile.id, email: profile.email } });
+   loadData();
  };
+
  window.addEventListener('offline-login', handleOfflineLogin);
- supabase.auth.getSession().then(({ data: { session }, error }) => {
- if (error && (error?.message?.includes('fetch') || error?.message?.includes('Failed') || error?.code === '0' || String(error).includes('fetch') || String(error).includes('Failed'))) {
- handleOfflineLogin();
- } else {
- setSession(session);
- if (session) {
- loadData();
- } else {
- setLoading(false);
- }
- }
+
+ supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+   if (error && (error?.message?.includes('fetch') || error?.message?.includes('Failed') || error?.code === '0' || String(error).includes('fetch') || String(error).includes('Failed'))) {
+     handleOfflineLogin();
+   } else if (session) {
+     setSession(session);
+     cacheAuthSession(session);
+     try {
+       const profile = await resolveUserProfile(session.user.email || '', session.user.id);
+       setCurrentUserProfile(profile);
+     } catch (e) {
+       console.warn('Error resolving user profile:', e);
+     }
+     loadData();
+   } else {
+     const saved = getSavedUserProfile();
+     if (saved && typeof navigator !== 'undefined' && !navigator.onLine) {
+       handleOfflineLogin();
+     } else {
+       setLoading(false);
+     }
+   }
  }).catch((err) => {
- if ((err?.message?.includes('fetch') || err?.message?.includes('Failed') || err?.code === '0' || String(err).includes('fetch') || String(err).includes('Failed'))) {
- handleOfflineLogin();
- } else {
- setLoading(false);
- }
+   if (err?.message?.includes('fetch') || err?.message?.includes('Failed') || err?.code === '0' || String(err).includes('fetch') || String(err).includes('Failed')) {
+     handleOfflineLogin();
+   } else {
+     setLoading(false);
+   }
  });
 
  const {
- data: { subscription },
- } = supabase.auth.onAuthStateChange((_event, session) => {
- 
-  if (!session) {
- setSession((prev: any) => {
- if (prev && prev.user?.id === 'offline') return prev;
- if (!window.navigator.onLine) {
- return { user: { id: 'offline' } };
- }
- return null;
- });
- } else {
- setSession(session);
- loadData();
- }
+   data: { subscription },
+ } = supabase.auth.onAuthStateChange(async (_event, session) => {
+   if (!session) {
+     setSession((prev: any) => {
+       if (prev && prev.user?.id === 'offline') return prev;
+       if (typeof window !== 'undefined' && !window.navigator.onLine) {
+         return { user: { id: 'offline' } };
+       }
+       return null;
+     });
+   } else {
+     setSession(session);
+     cacheAuthSession(session);
+     try {
+       const profile = await resolveUserProfile(session.user.email || '', session.user.id);
+       setCurrentUserProfile(profile);
+     } catch (e) {
+       console.warn('Error resolving profile on auth state change:', e);
+     }
+     loadData();
+   }
  });
 
- 
-  return () => {
- subscription.unsubscribe();
- window.removeEventListener('offline-login', handleOfflineLogin);
+ return () => {
+   subscription.unsubscribe();
+   window.removeEventListener('offline-login', handleOfflineLogin);
  };
- }, []);
+ }, [loadData]);
 
  useEffect(() => {
  let hasChanges = false;
@@ -610,24 +646,27 @@ export default function App() {
  }
  };
 
+ const visibleIntegrados = React.useMemo(() => filterIntegradosForUser(integrados, currentUserProfile), [integrados, currentUserProfile]);
+ const visibleVisits = React.useMemo(() => filterVisitsForUser(visits, visibleIntegrados, currentUserProfile), [visits, visibleIntegrados, currentUserProfile]);
+
  const renderContent = () => {
  
   return (
  <>
  <div style={{ display: currentTab === 'prioridades' ? 'block' : 'none' }}>
- <Prioridades integrados={integrados} visits={visits} onNavigateToIntegrado={(id) => setViewingIntegradoId(id)} />
+ <Prioridades integrados={visibleIntegrados} visits={visibleVisits} onNavigateToIntegrado={(id) => setViewingIntegradoId(id)} />
  </div>
 
  <div style={{ display: currentTab === 'dashboard' ? 'block' : 'none' }}>
- <Dashboard visits={visits} integrados={integrados} onNavigateToVisit={handleNavigateToViewIntegrado} />
+ <Dashboard visits={visibleVisits} integrados={visibleIntegrados} onNavigateToVisit={handleNavigateToViewIntegrado} />
  </div>
  
  {currentTab === 'visitas' && (
  isVisitFormOpen ? (
  <div className="space-y-6">
  <VisitaForm 
- integrados={integrados} 
- visits={visits}
+ integrados={visibleIntegrados} 
+ visits={visibleVisits}
  initialData={editingVisitId ? visits.find(v => v.id === editingVisitId) : undefined}
  isNewLote={isNewLoteMode}
  onSave={editingVisitId ? handleUpdateVisit : handleAddVisit} 
@@ -637,8 +676,8 @@ export default function App() {
  ) : (
  <div className="space-y-4">
  <VisitsList 
- visits={visits} 
- integrados={integrados} 
+ visits={visibleVisits} 
+ integrados={visibleIntegrados} 
  onEditVisit={handleEditVisitClick} 
  onDeleteVisit={handleDeleteVisit} 
  onExport={handleExport}
@@ -653,23 +692,24 @@ export default function App() {
  
  {currentTab === 'integrados' && (
  <Integrados
- integrados={integrados}
- visits={visits}
- totalVisits={visits.length}
+ integrados={visibleIntegrados}
+ visits={visibleVisits}
+ totalVisits={visibleVisits.length}
  onUpdate={handleUpdateIntegrado}
  onDelete={handleDeleteIntegrado}
  />
  )}
  
- {currentTab === 'medicamentos' && <MedicationAnalysis visits={visits} integrados={integrados} />}
-          {currentTab === 'curva' && <ReferenceCurve />}
+ {currentTab === 'medicamentos' && <MedicationAnalysis visits={visibleVisits} integrados={visibleIntegrados} />}
+ {currentTab === 'curva' && <ReferenceCurve />}
  {currentTab === 'importar' && <ImportData onImportComplete={() => { loadData(); setCurrentTab('dashboard'); }} />}
+ {currentTab === 'usuarios' && <UsuariosGestao integrados={integrados} currentUser={currentUserProfile} />}
 
  {viewingIntegradoId && (
  <IntegradoDetailsModal
  integradoId={viewingIntegradoId}
- visits={visits}
- integrados={integrados}
+ visits={visibleVisits}
+ integrados={visibleIntegrados}
  onClose={() => setViewingIntegradoId(null)}
  />
  )}
@@ -683,8 +723,10 @@ export default function App() {
  case 'dashboard': return 'Dashboard de Desempenho';
  case 'visitas': return isVisitFormOpen ? (editingVisitId ? 'Editar Lançamento' : (isNewLoteMode ? 'Novo Lote' : 'Novo Lançamento')) : 'Visitas';
  case 'integrados': return 'Gestão de Lotes';
+ case 'medicamentos': return 'Análise de Medicamentos';
  case 'curva': return 'Curva de Referência';
  case 'importar': return 'Importar Base de Dados';
+ case 'usuarios': return 'Equipe & Controle de Clientes (RLS)';
  default: return 'Visão Geral';
  }
  }
@@ -701,15 +743,37 @@ export default function App() {
 
  
   if (!session) {
- return <Login />;
+ return <Login onLoginSuccess={(profile) => {
+   setCurrentUserProfile(profile);
+   setSession({ user: { id: profile.id, email: profile.email } });
+   loadData();
+ }} />;
  }
 
  const handleLogout = async () => {
- await supabase.auth.signOut();
+   clearAuthCache();
+   setCurrentUserProfile(null);
+   setSession(null);
+   try {
+     await supabase.auth.signOut();
+   } catch (e) {
+     console.warn('Logout error:', e);
+   }
  };
 
- 
-  return (
+ const getRoleBadge = () => {
+   if (!currentUserProfile) return null;
+   const role = currentUserProfile.papel;
+   if (role === 'MASTER' || role === 'SUPER_ADMIN') {
+     return <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-300 dark:border-purple-800 rounded-full uppercase tracking-wider">👑 Acesso Master</span>;
+   }
+   if (role === 'TECNICO_NUTRON' || role === 'COORDENADOR') {
+     return <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-300 dark:border-blue-800 rounded-full uppercase tracking-wider">🏢 Técnico Nutron</span>;
+   }
+   return <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-full uppercase tracking-wider">🚜 Técnico Cliente</span>;
+ };
+
+ return (
  <div className="flex h-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
  {/* Mobile overlay */}
  {isSidebarOpen && (
@@ -720,7 +784,13 @@ export default function App() {
  )}
  
  <div className={`fixed inset-y-0 left-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 z-30 transition-transform duration-300 ease-in-out`}>
- <Sidebar currentTab={currentTab.startsWith('visitas') ? 'visitas' : currentTab} setCurrentTab={handleTabChange} onStartTutorial={() => { setRunTutorial(true); setIsSidebarOpen(false); }} />
+ <Sidebar 
+   currentTab={currentTab.startsWith('visitas') ? 'visitas' : currentTab} 
+   setCurrentTab={handleTabChange} 
+   onStartTutorial={() => { setRunTutorial(true); setIsSidebarOpen(false); }}
+   userProfile={currentUserProfile}
+   onLogout={handleLogout}
+ />
  </div>
 
  <main className="flex-1 flex flex-col w-full min-w-0">
@@ -733,15 +803,18 @@ export default function App() {
  <Menu className="w-6 h-6" />
  </button>
  <h1 id="header-title" className="text-lg md:text-xl font-bold text-slate-800 truncate">{getPageTitle()}</h1>
+ 
+ {getRoleBadge()}
+
  {currentTab === 'integrados' && (
  <div className="hidden sm:flex items-center gap-3 text-xs text-slate-600 ml-2 border-l border-slate-200 pl-4">
  <div className="flex items-center gap-1.5">
  <Users className="w-4 h-4 text-blue-500" />
- <span>Total: <strong className="text-slate-800">{integrados.length}</strong></span>
+ <span>Lotes: <strong className="text-slate-800">{visibleIntegrados.length}</strong></span>
  </div>
  <div className="flex items-center gap-1.5">
  <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
- <span>Ativos: <strong className="text-slate-800">{integrados.filter(i => i.status === 'Em andamento').length}</strong></span>
+ <span>Ativos: <strong className="text-slate-800">{visibleIntegrados.filter(i => i.status === 'Em andamento').length}</strong></span>
  </div>
  </div>
  )}
@@ -749,7 +822,7 @@ export default function App() {
  <div className="hidden sm:flex items-center gap-3 text-xs text-slate-600 ml-2 border-l border-slate-200 pl-4">
  <div className="flex items-center gap-1.5">
  <ClipboardList className="w-4 h-4 text-blue-500" />
- <span>Lançamentos: <strong className="text-slate-800">{visits.length}</strong></span>
+ <span>Lançamentos: <strong className="text-slate-800">{visibleVisits.length}</strong></span>
  </div>
  </div>
  )}

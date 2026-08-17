@@ -118,6 +118,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <thead className="bg-slate-50 text-slate-700 font-semibold text-xs sticky top-0 z-20 shadow-sm">
  <tr>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Data</th>
+ <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Cliente</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Integrado</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Alojamento</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Tipo Lote</th>
@@ -162,7 +163,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <AnimatePresence>
  {filteredVisits.length === 0 ? (
  <tr>
- <td colSpan={39} className="px-5 py-8 text-center text-slate-500">Nenhuma visita encontrada.</td>
+ <td colSpan={40} className="px-5 py-8 text-center text-slate-500">Nenhuma visita encontrada.</td>
  </tr>
  ) : filteredVisits.map((v) => {
  const integrado = getIntegradoForVisit(v);
@@ -212,6 +213,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <td className="px-2 py-2 whitespace-nowrap">{
  new Date(Number(v.date.split('-')[0]), Number(v.date.split('-')[1]) - 1, Number(v.date.split('-')[2])).toLocaleDateString('pt-BR')
  }</td>
+ <td className="px-2 py-2 whitespace-nowrap text-slate-600">{integrado?.empresaName || '-'}</td>
  <td className={`px-2 py-2 font-medium ${pendingSyncIds?.includes(v.id) ? 'text-red-600 font-bold' : 'text-slate-800'}`} title={pendingSyncIds?.includes(v.id) ? "Aguardando sincronização com a nuvem" : ""}>{integrado?.name || 'Desconhecido'}</td>
  <td className="px-2 py-2 whitespace-nowrap text-slate-600">{integrado?.alojamentoDate ? new Date(Number(integrado.alojamentoDate.split('-')[0]), Number(integrado.alojamentoDate.split('-')[1]) - 1, Number(integrado.alojamentoDate.split('-')[2])).toLocaleDateString('pt-BR') : '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap"><span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">{v.tipoLote || 'Misto'}</span></td>

@@ -12,7 +12,68 @@ export interface Empresa {
   deleted_at?: string | null;
 }
 
-export type PapelUsuario = 'SUPER_ADMIN' | 'ADMIN_EMPRESA' | 'COORDENADOR' | 'TECNICO' | 'CLIENTE_VISUALIZADOR';
+export type PapelUsuario = 
+  | 'MASTER' 
+  | 'TECNICO_NUTRON' 
+  | 'TECNICO_CLIENTE' 
+  | 'SUPER_ADMIN' 
+  | 'ADMIN_EMPRESA' 
+  | 'COORDENADOR' 
+  | 'TECNICO' 
+  | 'CLIENTE_VISUALIZADOR';
+
+export interface UserProfile {
+  id: string;
+  auth_uid?: string;
+  email: string;
+  nome: string;
+  papel: PapelUsuario;
+  empresa_id?: string;
+  empresa_nome?: string;
+  integrado_padrao_id?: string;
+  clientes_permitidos?: string[]; // IDs ou nomes de integrados/clientes que pode acessar
+}
+
+export interface TecnicoIntegrado {
+  id?: string;
+  usuario_id: string;
+  integrado_id: string;
+  created_at?: string;
+}
+
+export function getRoleLabel(papel?: PapelUsuario | string): string {
+  switch (papel) {
+    case 'MASTER':
+    case 'SUPER_ADMIN':
+      return 'Acesso Master';
+    case 'TECNICO_NUTRON':
+      return 'Técnico Nutron';
+    case 'TECNICO_CLIENTE':
+      return 'Técnico Cliente';
+    case 'ADMIN_EMPRESA':
+      return 'Administrador Cliente';
+    case 'COORDENADOR':
+      return 'Coordenador Técnico';
+    case 'TECNICO':
+      return 'Técnico de Campo';
+    case 'CLIENTE_VISUALIZADOR':
+      return 'Visualizador';
+    default:
+      return 'Técnico';
+  }
+}
+
+export function isMasterRole(papel?: PapelUsuario | string): boolean {
+  return papel === 'MASTER' || papel === 'SUPER_ADMIN';
+}
+
+export function isNutronTech(papel?: PapelUsuario | string): boolean {
+  return papel === 'TECNICO_NUTRON' || papel === 'COORDENADOR';
+}
+
+export function isClientTech(papel?: PapelUsuario | string): boolean {
+  return papel === 'TECNICO_CLIENTE' || papel === 'TECNICO' || papel === 'ADMIN_EMPRESA';
+}
 
 export interface Usuario {
   id: string;
@@ -173,6 +234,8 @@ export interface Integrado {
   alojamentoDate: string;
   status: 'Em andamento' | 'Fechado';
   fechamentoDate?: string;
+  empresaId?: string;
+  empresaName?: string;
 }
 
 export interface Tratamento {

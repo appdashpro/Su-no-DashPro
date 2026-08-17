@@ -14,8 +14,11 @@ const EMPRESA_ID = '00000000-0000-0000-0000-000000000001';
 const getIntegradosLocal = (): Integrado[] => {
   try {
     const data = safeStorage.getItem(INTEGRADOS_KEY);
-    const parsed = data ? JSON.parse(data) : []; 
-    return (Array.isArray(parsed) && parsed.length > 0) ? parsed : initialIntegrados;
+    const parsed: Integrado[] = data ? JSON.parse(data) : []; 
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+    return initialIntegrados;
   } catch {
     return initialIntegrados;
   }
@@ -283,30 +286,28 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
         }
       }
 
-      const [resIntegrados, resLotes, resVisitas] = await Promise.all([
-        supabase.from('integrados').select('*'),
-        supabase.from('lotes').select('*'),
-        supabase.from('visitas').select('*, cargas_racao(*), tratamentos(*)')
-      ]);
-
-      if (resIntegrados.error) throw resIntegrados.error;
-      if (resLotes.error) throw resLotes.error;
-      if (resVisitas.error) throw resVisitas.error;
-
-      const integradosDB = resIntegrados.data;
-      const lotesDB = resLotes.data;
-      const visitasDB = resVisitas.data;
+      const { data: integradosDB, error: e1 } = await supabase.from('integrados').select('*');
+      if (e1) throw e1;
+      const { data: lotesDB, error: e2 } = await supabase.from('lotes').select('*');
+      if (e2) throw e2;
+      const { data: visitasDB, error: e3 } = await supabase.from('visitas').select('*, cargas_racao(*), tratamentos(*)');
+      if (e3) throw e3;
+      const { data: empresasDB, error: e4 } = await supabase.from('empresas').select('*');
+      if (e4) throw e4;
 
       const currentLocalIntegrados = getIntegradosLocal();
       const mappedIntegrados: Integrado[] = (lotesDB || []).map(lote => {
         const integrado = integradosDB?.find(i => i.id === lote.integrado_id);
         const localVersion = currentLocalIntegrados.find(i => i.id === lote.id);
+        const empresa = empresasDB?.find(e => e.id === lote.empresa_id);
         return {
           id: lote.id, 
           name: integrado?.nome || 'Desconhecido',
           alojamentoDate: lote.data_alojamento,
           status: lote.status === 'Ativo' ? 'Em andamento' : 'Fechado',
-          fechamentoDate: localVersion?.fechamentoDate || undefined
+          fechamentoDate: localVersion?.fechamentoDate || undefined,
+          empresaId: lote.empresa_id,
+          empresaName: empresa?.nome
         };
       });
 
@@ -402,12 +403,8 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
       
       window.dispatchEvent(new Event('sync-completed'));
       return true;
-    } catch (e: any) {
-      if (e?.message?.includes('fetch') || e?.message?.includes('network') || e?.message?.includes('Failed')) {
-          console.warn('Sync failed due to network, falling back to offline mode.');
-      } else {
-          console.error('Error syncing:', e);
-      }
+    } catch (e) {
+      console.error('Error syncing:', e);
       throw e;
     }
   },
@@ -468,8 +465,9 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
        // (because the old UI allowed creating Integrados offline which just stayed in localStorage)
        const localIntegrados = getIntegradosLocal();
        const localLote = localIntegrados.find(i => i.id === loteId);
-       
-       if (localLote) {
+        if (localLote) {
+           const targetEmpresaId = localLote.empresaId || EMPRESA_ID;
+
            // We try to upsert the Integrado and Lote to prevent Foreign Key errors
            const { data: existingIntegrados } = await supabase.from('integrados').select('id').eq('nome', localLote.name);
            let dbIntegradoId = existingIntegrados && existingIntegrados.length > 0 ? existingIntegrados[0].id : crypto.randomUUID();
@@ -477,7 +475,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
            if (!existingIntegrados || existingIntegrados.length === 0) {
                await supabase.from('integrados').upsert({
                    id: dbIntegradoId,
-                   empresa_id: EMPRESA_ID,
+                   empresa_id: targetEmpresaId,
                    nome: localLote.name,
                    ativo: true
                });
@@ -491,7 +489,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
 
             await supabase.from('lotes').upsert({
                 id: loteId,
-                empresa_id: EMPRESA_ID,
+                empresa_id: targetEmpresaId,
                 integrado_id: dbIntegradoId,
                 data_alojamento: localLote.alojamentoDate || v.date,
                 animais_alojados: finalAloj,
@@ -503,7 +501,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
        
        const visitaRow = {
           id: v.id,
-          empresa_id: EMPRESA_ID,
+          empresa_id: localLote?.empresaId || EMPRESA_ID,
           lote_id: loteId,
           usuario_id: userId,
           data_visita: v.date,
@@ -560,7 +558,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
        if (cargas.length > 0) {
          const cargasToInsert = cargas.map(c => ({
             id: crypto.randomUUID(),
-            empresa_id: EMPRESA_ID,
+            empresa_id: localLote?.empresaId || EMPRESA_ID,
             visita_id: v.id,
             lote_id: loteId,
             tipo_racao: c.tipo,
@@ -578,7 +576,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
        if (v.tratamentos && v.tratamentos.length > 0) {
          const tratamentosToInsert = v.tratamentos.map(t => ({
             id: (t.id && t.id.length === 36 && t.id.includes("-")) ? t.id : crypto.randomUUID(),
-            empresa_id: EMPRESA_ID,
+            empresa_id: localLote?.empresaId || EMPRESA_ID,
             visita_id: v.id,
             lote_id: loteId,
             medicamento: t.produto,

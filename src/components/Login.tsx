@@ -1,29 +1,22 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, Lock, Mail, Loader2, Github } from 'lucide-react';
+import { Lock, Mail, Loader2, ShieldCheck, WifiOff } from 'lucide-react';
+import { resolveUserProfile, saveUserProfile, cacheAuthSession, getSavedUserProfile, getCachedAuthSession } from '../lib/auth';
+import { UserProfile } from '../types';
 
-export function Login() {
+interface LoginProps {
+  onLoginSuccess?: (profile: UserProfile) => void;
+}
+
+export function Login({ onLoginSuccess }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-    const handleGithubLogin = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'github',
-      });
-      if (error) throw new Error(error.message);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao logar com GitHub.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const cachedProfile = getSavedUserProfile();
+  const cachedSession = getCachedAuthSession();
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,38 +24,62 @@ export function Login() {
     setError(null);
     setMessage(null);
 
+    const normEmail = email.trim().toLowerCase();
+
     try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        if (error) {
-          if ((error?.message?.includes('fetch') || error?.message?.includes('Failed') || error?.code === '0' || String(error).includes('fetch') || String(error).includes('Failed'))) {
-            // Bypass to offline mode
-            window.dispatchEvent(new CustomEvent('offline-login'));
-            return;
-          }
-          throw new Error(error.message || JSON.stringify(error));
+      // 1. If offline, check if we have cached profile or offline fallback
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const profile = await resolveUserProfile(normEmail, 'offline_' + Math.random().toString(36).substring(2, 7));
+        saveUserProfile(profile);
+        cacheAuthSession({ user: { id: profile.id, email: profile.email } });
+        window.dispatchEvent(new CustomEvent('offline-login', { detail: { profile } }));
+        if (onLoginSuccess) onLoginSuccess(profile);
+        return;
+      }
+
+      // 2. Attempt online login with Supabase
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: normEmail,
+        password,
+      });
+
+      if (authError) {
+        // Check if network error -> fallback to offline session
+        if (
+          authError.message?.includes('fetch') ||
+          authError.message?.includes('Failed') ||
+          authError.message?.includes('Network') ||
+          String(authError).includes('fetch')
+        ) {
+          const profile = await resolveUserProfile(normEmail, 'offline_field');
+          saveUserProfile(profile);
+          cacheAuthSession({ user: { id: profile.id, email: profile.email } });
+          window.dispatchEvent(new CustomEvent('offline-login', { detail: { profile } }));
+          if (onLoginSuccess) onLoginSuccess(profile);
+          return;
         }
-        setMessage('Conta criada com sucesso! Verifique seu email ou faça o login.');
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) {
-          if ((error?.message?.includes('fetch') || error?.message?.includes('Failed') || error?.code === '0' || String(error).includes('fetch') || String(error).includes('Failed'))) {
-            // Bypass to offline mode
-            window.dispatchEvent(new CustomEvent('offline-login'));
-            return;
-          }
-          throw new Error(error.message || JSON.stringify(error));
-        }
+
+        throw new Error(authError.message || 'Credenciais inválidas. Verifique seu email e senha.');
+      }
+
+      if (data?.session?.user) {
+        const profile = await resolveUserProfile(data.session.user.email || normEmail, data.session.user.id);
+        saveUserProfile(profile);
+        cacheAuthSession(data.session);
+        if (onLoginSuccess) onLoginSuccess(profile);
       }
     } catch (err: any) {
-      if ((err?.message?.includes('fetch') || err?.message?.includes('Failed') || err?.code === '0' || String(err).includes('fetch') || String(err).includes('Failed'))) {
-        window.dispatchEvent(new CustomEvent('offline-login'));
+      if (
+        err?.message?.includes('fetch') ||
+        err?.message?.includes('Failed') ||
+        err?.code === '0' ||
+        String(err).includes('fetch')
+      ) {
+        const profile = await resolveUserProfile(normEmail, 'offline_field');
+        saveUserProfile(profile);
+        cacheAuthSession({ user: { id: profile.id, email: profile.email } });
+        window.dispatchEvent(new CustomEvent('offline-login', { detail: { profile } }));
+        if (onLoginSuccess) onLoginSuccess(profile);
         return;
       }
       setError(err.message || 'Ocorreu um erro durante a autenticação.');
@@ -72,43 +89,43 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 text-slate-900">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center shadow-lg">
-            <User className="w-8 h-8 text-white" />
+          <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-md shadow-blue-500/20">
+            <ShieldCheck className="w-8 h-8 text-white" />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          {isSignUp ? 'Criar nova conta' : 'Acesse sua conta'}
+        <h2 className="mt-4 text-center text-2xl font-bold tracking-tight text-slate-900">
+          Suíno DashPro
         </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Suíno DashPro - Gestão Agropecuária
+        <p className="mt-1 text-center text-xs font-semibold tracking-wider uppercase text-slate-500">
+          Sistema de Gestão Técnica
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-gray-100">
-          <form className="space-y-6" onSubmit={handleAuth}>
+      <div className="mt-7 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
+        <div className="bg-white border border-slate-200/80 py-8 px-6 shadow-sm rounded-2xl sm:px-10">
+          <form className="space-y-4" onSubmit={handleAuth}>
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-xs leading-relaxed">
                 {error}
               </div>
             )}
             
             {message && (
-              <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-md text-sm">
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl text-xs">
                 {message}
               </div>
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email
+              <label htmlFor="email" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                E-mail
               </label>
-              <div className="mt-1 relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
+              <div className="relative rounded-xl shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Mail className="h-4 w-4 text-slate-400" />
                 </div>
                 <input
                   id="email"
@@ -118,19 +135,19 @@ export function Login() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 border"
-                  placeholder="seu@email.com"
+                  className="bg-white border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 block w-full pl-10 pr-3 py-2.5 sm:text-sm text-slate-900 rounded-xl placeholder-slate-400 transition-all outline-none"
+                  placeholder="seu.email@empresa.com"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                 Senha
               </label>
-              <div className="mt-1 relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
+              <div className="relative rounded-xl shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Lock className="h-4 w-4 text-slate-400" />
                 </div>
                 <input
                   id="password"
@@ -140,51 +157,49 @@ export function Login() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 border"
+                  className="bg-white border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 block w-full pl-10 pr-3 py-2.5 sm:text-sm text-slate-900 rounded-xl placeholder-slate-400 transition-all outline-none"
                   placeholder="••••••••"
                 />
               </div>
             </div>
 
-            <div>
+            <div className="pt-2">
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
+                className="w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all active:scale-[0.99]"
               >
                 {loading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  isSignUp ? 'Cadastrar' : 'Entrar'
+                  'Entrar'
                 )}
               </button>
             </div>
           </form>
 
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">
-                  Ou
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-6 text-center">
+          {/* Offline Session Resume option when field technician has cached credentials */}
+          {cachedSession && (
+            <div className="mt-5 pt-4 border-t border-slate-100 text-center">
               <button
-                onClick={() => setIsSignUp(!isSignUp)}
-                className="text-blue-600 hover:text-blue-500 font-medium text-sm transition-colors"
                 type="button"
+                onClick={() => {
+                  const p = cachedProfile || {
+                    id: cachedSession.user?.id || 'offline_cached',
+                    email: cachedSession.user?.email || 'campo@suinodashpro.com',
+                    nome: 'Técnico em Campo',
+                    papel: 'TECNICO_NUTRON'
+                  };
+                  window.dispatchEvent(new CustomEvent('offline-login', { detail: { profile: p } }));
+                  if (onLoginSuccess) onLoginSuccess(p);
+                }}
+                className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-blue-600 transition-colors"
               >
-                {isSignUp
-                  ? 'Já tem uma conta? Faça login'
-                  : 'Ainda não tem conta? Cadastre-se'}
+                <WifiOff className="w-3.5 h-3.5 text-amber-500" />
+                Continuar com sessão salva offline ({cachedProfile?.nome || 'Campo'})
               </button>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
