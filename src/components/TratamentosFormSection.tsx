@@ -1,7 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Tratamento, GrowthCurvePoint } from '../types';
 import { getActiveCurve } from '../data';
+
+interface MedicationMemory {
+  produto: string;
+  motivo?: string;
+  doseMgKg: number;
+  concentracao?: number;
+  duracaoDias: number;
+  carenciaDias?: number;
+}
 
 interface Props {
   tratamentos: Tratamento[];
@@ -15,16 +24,87 @@ interface Props {
 export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVivos, tipoLote, alojamentoDate }: Props) {
   const [isExpanded, setIsExpanded] = useState(false);
 
+  const [memory, setMemory] = useState<MedicationMemory[]>([]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('medicationMemory');
+      if (stored) setMemory(JSON.parse(stored));
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    if (!tratamentos || tratamentos.length === 0) return;
+    let newMemory = [...memory];
+    let changed = false;
+    tratamentos.forEach(t => {
+      if (t.produto && t.produto.trim().length > 2 && t.doseMgKg && t.duracaoDias) {
+        const existingIdx = newMemory.findIndex(m => m.produto.toLowerCase() === t.produto.trim().toLowerCase());
+        const newEntry = {
+          produto: t.produto.trim(),
+          doseMgKg: t.doseMgKg,
+          concentracao: t.concentracao,
+          duracaoDias: t.duracaoDias,
+          carenciaDias: t.carenciaDias,
+          motivo: t.motivo
+        };
+        if (existingIdx >= 0) {
+          if (JSON.stringify(newMemory[existingIdx]) !== JSON.stringify(newEntry) || existingIdx !== 0) {
+             newMemory.splice(existingIdx, 1);
+             newMemory.unshift(newEntry);
+             changed = true;
+          }
+        } else {
+          newMemory.unshift(newEntry);
+          changed = true;
+        }
+      }
+    });
+    if (changed) {
+      newMemory = newMemory.slice(0, 5); // Limitar aos últimos 5
+      setMemory(newMemory);
+      localStorage.setItem('medicationMemory', JSON.stringify(newMemory));
+    }
+  }, [tratamentos, memory]);
+
+  const [manualWeight, setManualWeight] = useState<number | ''>('');
+
   // Find expected weight based on age and curve
   const { curve } = getActiveCurve(alojamentoDate, 'Em andamento', tipoLote);
   const expectedWeightPoint = curve.find((p: GrowthCurvePoint) => p.dia >= (idade || 0));
-  const pesoEstimado = expectedWeightPoint ? expectedWeightPoint.pesoInicial : 0;
+  const pesoEstimadoCurve = expectedWeightPoint ? expectedWeightPoint.pesoInicial : 0;
+  const effectiveWeight = manualWeight !== '' ? Number(manualWeight) : pesoEstimadoCurve;
+
+  const handleWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setManualWeight(val === '' ? '' : parseFloat(val));
+    const newWeight = val === '' ? pesoEstimadoCurve : parseFloat(val);
+    
+    // Recalculate all treatments with the new weight
+    if (tratamentos.length > 0) {
+      const updated = tratamentos.map(t => {
+        if (!t.doseMgKg) return t;
+        let mgPorDia = t.doseMgKg * newWeight * animaisVivos;
+        let produtoPorDia = mgPorDia;
+        if (t.concentracao && t.concentracao > 0) {
+          produtoPorDia = mgPorDia / (t.concentracao / 100);
+        }
+        const gramasPorDia = produtoPorDia / 1000;
+        return {
+          ...t,
+          quantidadePorDia: Number(gramasPorDia.toFixed(2)),
+          quantidadeTotal: t.duracaoDias ? Number((gramasPorDia * t.duracaoDias).toFixed(2)) : 0
+        };
+      });
+      onChange(updated);
+    }
+  };
 
   const handleAdd = () => {
     onChange([
       ...tratamentos,
       {
-        id: Math.random().toString(36).substring(7),
+        id: crypto.randomUUID(),
         produto: '',
         doseMgKg: 0,
         duracaoDias: 0,
@@ -34,14 +114,27 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
 
   const handleUpdate = (index: number, field: keyof Tratamento, value: any) => {
     const newTratamentos = [...tratamentos];
-    newTratamentos[index] = { ...newTratamentos[index], [field]: value };
+    let updatedItem = { ...newTratamentos[index], [field]: value };
+    
+    if (field === 'produto' && value) {
+      const mem = memory.find(m => m.produto.toLowerCase() === String(value).trim().toLowerCase());
+      if (mem) {
+        if (!updatedItem.doseMgKg) updatedItem.doseMgKg = mem.doseMgKg;
+        if (!updatedItem.concentracao && mem.concentracao) updatedItem.concentracao = mem.concentracao;
+        if (!updatedItem.duracaoDias) updatedItem.duracaoDias = mem.duracaoDias;
+        if (!updatedItem.motivo && mem.motivo) updatedItem.motivo = mem.motivo;
+        if (!updatedItem.carenciaDias && mem.carenciaDias) updatedItem.carenciaDias = mem.carenciaDias;
+      }
+    }
+    
+    newTratamentos[index] = updatedItem;
     
     // Recalculate quantities
     const t = newTratamentos[index];
-    if (t.doseMgKg && pesoEstimado && animaisVivos) {
+    if (t.doseMgKg && effectiveWeight && animaisVivos) {
       // Dose is mg per kg of body weight.
       // Total mg per day = dose * weight * animals
-      let mgPorDia = t.doseMgKg * pesoEstimado * animaisVivos;
+      let mgPorDia = t.doseMgKg * effectiveWeight * animaisVivos;
       
       // If concentration is provided (e.g. mg/ml or g/100g -> mg/g), we can adjust, but usually concentration is % or mg/g
       // Let's assume user inputs concentration as needed, or we just calculate active principle if no concentration.
@@ -94,7 +187,17 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 p-2 rounded">
             <div>Idade base: <span className="font-semibold text-slate-700">{idade || 0} dias</span></div>
-            <div>Peso est.: <span className="font-semibold text-slate-700">{pesoEstimado.toFixed(2)} kg</span></div>
+            <div className="flex items-center gap-1">
+              Peso est.: 
+              <input 
+                type="number" 
+                step="0.01" 
+                value={manualWeight === '' && pesoEstimadoCurve > 0 ? pesoEstimadoCurve.toFixed(2) : manualWeight}
+                onChange={handleWeightChange}
+                className="w-16 px-1 py-0.5 text-slate-700 font-semibold bg-white border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+              />
+              kg
+            </div>
             <div>Animais: <span className="font-semibold text-slate-700">{animaisVivos}</span></div>
           </div>
 
@@ -112,11 +215,22 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
                 <div>
                   <label className="block text-xs text-slate-500 mb-1">Produto / Princípio Ativo</label>
                   <input
+                    list="medication-suggestions"
                     type="text"
                     value={tratamento.produto}
                     onChange={(e) => handleUpdate(index, 'produto', e.target.value)}
                     className="w-full border border-slate-200 rounded p-1.5 text-sm"
                     placeholder="Ex: Amoxicilina"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Motivo do Tratamento</label>
+                  <input
+                    type="text"
+                    value={tratamento.motivo || ''}
+                    onChange={(e) => handleUpdate(index, 'motivo', e.target.value)}
+                    className="w-full border border-slate-200 rounded p-1.5 text-sm"
+                    placeholder="Ex: Doença Respiratória"
                   />
                 </div>
                 <div>
@@ -149,6 +263,16 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
                     placeholder="Ex: 5"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Carência (Dias) <span className="text-[10px]">(Abate)</span></label>
+                  <input
+                    type="number"
+                    value={tratamento.carenciaDias || ''}
+                    onChange={(e) => handleUpdate(index, 'carenciaDias', parseInt(e.target.value))}
+                    className="w-full border border-slate-200 rounded p-1.5 text-sm"
+                    placeholder="Ex: 15"
+                  />
+                </div>
               </div>
               
               {tratamento.doseMgKg > 0 && tratamento.duracaoDias > 0 && (
@@ -175,6 +299,11 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
           </button>
         </div>
       )}
+      <datalist id="medication-suggestions">
+        {memory.map(m => (
+          <option key={m.produto} value={m.produto} />
+        ))}
+      </datalist>
     </div>
   );
 }

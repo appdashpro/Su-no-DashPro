@@ -8,6 +8,65 @@ export interface PreProcessedData {
   errors: string[];
 }
 
+// Helper to extract housed animals and mortality from recommendation notes
+function extractAnimalsFromText(text: string) {
+  let alojados: number | undefined = undefined;
+  let mortos: number | undefined = undefined;
+  let mortPct: number | undefined = undefined;
+
+  // 1. "Mortalidade X animais de Y = Z%" or "Mortalidade X animal de Y"
+  const m1 = text.match(/mortalidade\s+(\d+)\s+animai?s?\s+de\s+(\d+[\d.]*)(?:\s*=\s*([\d,.]+)%?)?/i);
+  if (m1) {
+    mortos = parseInt(m1[1], 10);
+    alojados = parseInt(m1[2].replace(/\./g, ''), 10);
+    if (m1[3]) {
+      mortPct = parseFloat(m1[3].replace(',', '.'));
+    }
+  }
+
+  // 2. "Alojados X leitões|suinos" or "Alojado X leitões|suinos" or "X leitões com..."
+  if (!alojados) {
+    const m2 = text.match(/alojad[oa]s?\s+(?:a\s+totalidade\s+de\s+)?(\d+[\d.]*)\s*(?:leit[õo]es|su[íi]nos|animais)?/i);
+    if (m2 && m2[1]) {
+      alojados = parseInt(m2[1].replace(/\./g, ''), 10);
+    }
+  }
+  if (!alojados) {
+    const m3 = text.match(/(\d+[\d.]*)\s*(?:leit[õo]es|su[íi]nos)\s+c[om]/i);
+    if (m3 && m3[1]) {
+      alojados = parseInt(m3[1].replace(/\./g, ''), 10);
+    }
+  }
+  if (!alojados) {
+    const m4 = text.match(/Berno\s*\((\d+)\)/i);
+    if (m4 && m4[1]) {
+      alojados = parseInt(m4[1], 10);
+    }
+  }
+
+  // 3. Deaths in text
+  if (mortos === undefined) {
+    if (/sem\s+mortes?/i.test(text)) {
+      mortos = 0;
+      mortPct = 0;
+    } else {
+      const m5 = text.match(/(\d+)\s+mortes?(?:\s*\(([\d,.]+)%?\))?/i);
+      if (m5) {
+        mortos = parseInt(m5[1], 10);
+        if (m5[2]) {
+          mortPct = parseFloat(m5[2].replace(',', '.'));
+        }
+      }
+    }
+  }
+
+  if (mortos !== undefined && alojados && alojados > 0 && mortPct === undefined) {
+    mortPct = Number(((mortos / alojados) * 100).toFixed(2));
+  }
+
+  return { alojados, mortos, mortPct };
+}
+
 export function preprocessImportData(rawData: string): PreProcessedData {
   const lines = rawData.trim().split('\n');
   const integradosMap = new Map<string, Integrado>();
@@ -73,6 +132,8 @@ export function preprocessImportData(rawData: string): PreProcessedData {
       if (cleanH === 'idade' || cleanH === 'idadedolote') map.idade = i;
       if (cleanH.includes('animaisalojados') || cleanH === 'alojados') map.animaisAlojados = i;
       if (cleanH.includes('animaismortos') || cleanH === 'mortos') map.animaisMortos = i;
+      if (cleanH.includes('descartes') || cleanH === 'descarte') map.descartesPeriodo = i;
+      if (cleanH.includes('sobra') || cleanH.includes('sobrasilo')) map.sobraSiloKg = i;
       if (cleanH.includes('volcargas') || cleanH.includes('cargaenviada') || cleanH.includes('cargaskg')) map.volumeCargas = i;
       if (cleanH.includes('recomendao') || cleanH.includes('recomendacao')) map.recomendacao = i;
       if (cleanH.includes('consumoacumulado') || cleanH.includes('consumoacumuladoreal') || (cleanH.includes('consumo') && !cleanH.includes('aloj') && !cleanH.includes('cresc') && !cleanH.includes('term'))) map.consumoAcumuladoReal = i;
@@ -251,11 +312,34 @@ export function preprocessImportData(rawData: string): PreProcessedData {
     let consumo = parseFloatSafe(consumoStr) || 0;
     if (consumo < 0) consumo = 0;
 
-    let mortStr = getCol('mortalidade');
-    let mort = parseFloatSafe(mortStr) || 0;
-    if (mort < 0) mort = 0;
+    let rec = (getCol('recomendacao') || '').trim();
+    const textExtracted = extractAnimalsFromText(rec);
 
-    let rec = getCol('recomendacao');
+    const colAnimaisAlojados = parseFloatSafe(getCol('animaisAlojados'));
+    const colAnimaisMortos = parseFloatSafe(getCol('animaisMortos'));
+    const colMortalidade = parseFloatSafe(getCol('mortalidade'));
+
+    const finalAnimaisAlojados = colAnimaisAlojados ?? textExtracted.alojados;
+    let finalAnimaisMortos = colAnimaisMortos ?? textExtracted.mortos;
+    let finalMortalidade = colMortalidade ?? textExtracted.mortPct ?? 0;
+
+    // Handle case where mortalidade column was supplied as an integer death count (e.g. 2 dead animals instead of 0.43%)
+    if (finalAnimaisMortos === undefined && colMortalidade !== undefined) {
+      if (finalAnimaisAlojados && finalAnimaisAlojados > 0 && colMortalidade >= 1 && Number.isInteger(colMortalidade)) {
+        finalAnimaisMortos = colMortalidade;
+        finalMortalidade = Number(((finalAnimaisMortos / finalAnimaisAlojados) * 100).toFixed(2));
+      } else {
+        finalMortalidade = colMortalidade;
+        if (finalAnimaisAlojados && finalAnimaisAlojados > 0) {
+          finalAnimaisMortos = Math.round((colMortalidade / 100) * finalAnimaisAlojados);
+        }
+      }
+    } else if (finalAnimaisMortos !== undefined && finalAnimaisAlojados && finalAnimaisAlojados > 0) {
+      // If we have both dead count and housed count, compute accurate %
+      finalMortalidade = Number(((finalAnimaisMortos / finalAnimaisAlojados) * 100).toFixed(2));
+    }
+
+    if (finalMortalidade < 0) finalMortalidade = 0;
 
     const tipoLoteRaw = (getCol('tipoLote') || 'Misto').trim();
     const tipoLote = tipoLoteRaw.toLowerCase().includes('f') ? 'Fêmea' : 'Misto';
@@ -269,17 +353,19 @@ export function preprocessImportData(rawData: string): PreProcessedData {
       integradoId: id,
       date: finalDateStr,
       idade: calculatedIdade,
-      recomendacao: (rec || '').trim(),
+      recomendacao: rec,
       consumoAcumuladoReal: consumo,
-      mortalidade: mort,
+      mortalidade: finalMortalidade,
       comedouro: parsedComedouro as 'Automático' | 'Linear' | 'Misto',
       tipoLote,
       colaborador: (getCol('colaborador') || '').trim(),
       pesoAloj: parseFloatSafe(getCol('pesoAloj')),
       pontuacaoSanitaria: parseInt((getCol('pontuacaoSanitaria') || '').trim(), 10) || undefined,
       
-      animaisAlojados: parseFloatSafe(getCol('animaisAlojados')),
-      animaisMortos: parseFloatSafe(getCol('animaisMortos')) ?? mort,
+      animaisAlojados: finalAnimaisAlojados,
+      animaisMortos: finalAnimaisMortos,
+      descartesPeriodo: parseFloatSafe(getCol('descartesPeriodo')) || 0,
+      sobraSiloKg: parseFloatSafe(getCol('sobraSiloKg')) || 0,
       volumeTotalCargas: parseFloatSafe(getCol('volumeCargas')),
 
       metaAlojamento: parseFloatSafe(getCol('metaAlojamento')) ?? metas.metaAlojamento,

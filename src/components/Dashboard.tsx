@@ -4,8 +4,14 @@ import {
  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
  BarChart, Bar, Cell, ReferenceArea, LabelList
 } from 'recharts';
-import { Visit, Integrado } from '../types';
-import { getExpectedConsumption } from '../data';
+import { Visit, Integrado, isVisitForIntegrado } from '../types';
+import { getExpectedConsumption, getActiveCurve } from '../data';
+import { 
+  calculateRealConsumption, 
+  calculateVisitAge, 
+  calculateMortalityRate,
+  calculateVisitFeedDeviation 
+} from '../utils/cargill-calculations';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import { FileDown, Filter, Calendar, Download, TrendingUp, TrendingDown, AlertTriangle, ArrowUpDown, ChevronDown, Check, X } from 'lucide-react';
@@ -127,188 +133,234 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  });
  }
 
- return filtered.filter(v => filteredIntegrados.some(i => i.id === v.integradoId));
+ return filtered.filter(v => filteredIntegrados.some(i => isVisitForIntegrado(v, i)));
  }, [visits, filteredIntegrados, selectedPeriod]);
 
- // Process data for charts
- const chartData = useMemo(() => {
- let avgPesoAloj: number | undefined = undefined;
- let dominantTipoLote: 'Misto' | 'Fêmea' | 'Macho' | undefined = undefined;
+  // Process data for charts
+  const chartData = useMemo(() => {
+    let avgPesoAloj: number | undefined = undefined;
+    let dominantTipoLote: 'Misto' | 'Fêmea' | 'Macho' | undefined = undefined;
+    let singleAlojamentoDate: string | undefined = undefined;
+    let singleStatus: string | undefined = undefined;
+    let singleFechamentoDate: string | undefined = undefined;
 
- if (filteredVisits.length > 0) {
- let totalPeso = 0;
- let countPeso = 0;
- const tiposCount = { 'Misto': 0, 'Fêmea': 0, 'Macho': 0 };
- 
- const uniqueIntegrados = new Set();
- // Calculate averages from the latest state of each lot in the filtered set
- [...filteredVisits].sort((a, b) => Number(b.idade) - Number(a.idade)).forEach(v => {
- if (!uniqueIntegrados.has(v.integradoId)) {
- uniqueIntegrados.add(v.integradoId);
- if (v.pesoAloj) {
- totalPeso += Number(v.pesoAloj);
- countPeso++;
- }
- if (v.tipoLote) {
- tiposCount[v.tipoLote as keyof typeof tiposCount] = (tiposCount[v.tipoLote as keyof typeof tiposCount] || 0) + 1;
- }
- }
- });
- 
- if (countPeso > 0) {
- avgPesoAloj = totalPeso / countPeso;
- }
- 
- let maxCount = -1;
- Object.entries(tiposCount).forEach(([tipo, count]) => {
- if (count > maxCount) {
- maxCount = count;
- dominantTipoLote = tipo as any;
- }
- });
- }
+    if (filteredIntegrados.length === 1) {
+      const single = filteredIntegrados[0];
+      singleAlojamentoDate = single.alojamentoDate;
+      singleStatus = single.status;
+      singleFechamentoDate = single.fechamentoDate;
+    }
 
- // Generates points for the expected curve (weekly + end of batch)
- const ages = new Set<number>();
- for (let i = 1; i <= 100; i += 7) {
- ages.add(i);
- }
- ages.add(100);
+    if (filteredVisits.length > 0) {
+      let totalPeso = 0;
+      let countPeso = 0;
+      const tiposCount = { 'Misto': 0, 'Fêmea': 0, 'Macho': 0 };
+      
+      const uniqueIntegrados = new Set();
+      // Calculate averages from the latest state of each lot in the filtered set
+      [...filteredVisits].sort((a, b) => {
+        const matchedA = filteredIntegrados.find(i => isVisitForIntegrado(a, i));
+        const matchedB = filteredIntegrados.find(i => isVisitForIntegrado(b, i));
+        return calculateVisitAge(b, matchedB) - calculateVisitAge(a, matchedA);
+      }).forEach(v => {
+        const matched = filteredIntegrados.find(i => isVisitForIntegrado(v, i));
+        const key = matched ? matched.id : v.integradoId;
+        if (!uniqueIntegrados.has(key)) {
+          uniqueIntegrados.add(key);
+          if (v.pesoAloj) {
+            totalPeso += Number(v.pesoAloj);
+            countPeso++;
+          }
+          if (v.tipoLote) {
+            tiposCount[v.tipoLote as keyof typeof tiposCount] = (tiposCount[v.tipoLote as keyof typeof tiposCount] || 0) + 1;
+          }
+        }
+      });
+      
+      if (countPeso > 0) {
+        avgPesoAloj = totalPeso / countPeso;
+      }
+      
+      let maxCount = -1;
+      Object.entries(tiposCount).forEach(([tipo, count]) => {
+        if (count > maxCount) {
+          maxCount = count;
+          dominantTipoLote = tipo as any;
+        }
+      });
+    }
 
- filteredVisits.forEach(v => ages.add(Number(v.idade)));
+    // Generates points for the expected curve (from 1 to 100 days)
+    const ages = new Set<number>();
+    for (let i = 1; i <= 100; i++) {
+      ages.add(i);
+    }
 
- const sortedAges = Array.from(ages).sort((a, b) => a - b);
+    filteredVisits.forEach(v => {
+      const matched = filteredIntegrados.find(i => isVisitForIntegrado(v, i));
+      const idade = calculateVisitAge(v, matched);
+      if (idade > 0) {
+        ages.add(idade);
+      }
+    });
 
- return sortedAges.map(idade => {
- const visitsAtAge = filteredVisits.filter(v => Number(v.idade) === idade);
- 
- // Calculate a stable expected consumption using the overall average pesoAloj and dominant tipoLote
- // For dashboard averages, we just use the default (current) curve by omitting dates.
- const expected = getExpectedConsumption(idade, dominantTipoLote, avgPesoAloj);
- 
- const dataPoint: any = {
- idade,
- consumoEsperado: expected,
- consumoEsperadoRange: [Math.max(0, expected - 5), expected + 5]
- };
- 
- visitsAtAge.forEach(v => {
- if (v.consumoAcumuladoReal && Number(v.consumoAcumuladoReal) > 0) {
- dataPoint[v.integradoId] = Number(v.consumoAcumuladoReal);
- }
- });
+    const sortedAges = Array.from(ages).sort((a, b) => a - b);
 
- return dataPoint;
- });
- }, [filteredVisits]);
+    return sortedAges.map(idade => {
+      const visitsAtAge = filteredVisits.filter(v => {
+        const matched = filteredIntegrados.find(i => isVisitForIntegrado(v, i));
+        return calculateVisitAge(v, matched) === idade;
+      });
+      
+      // Calculate expected consumption using reactive Cargill curve utilities
+      const expected = getExpectedConsumption(
+        idade, 
+        dominantTipoLote, 
+        avgPesoAloj, 
+        singleAlojamentoDate, 
+        singleStatus, 
+        singleFechamentoDate
+      );
+      
+      const dataPoint: any = {
+        idade,
+        consumoEsperado: expected,
+        consumoEsperadoRange: [Math.max(0, expected - 5), expected + 5]
+      };
+      
+      visitsAtAge.forEach(v => {
+        const matched = filteredIntegrados.find(i => isVisitForIntegrado(v, i));
+        const key = matched ? matched.id : v.integradoId;
+        const realConsumo = calculateRealConsumption(v);
+        if (realConsumo > 0) {
+          if (!dataPoint[key] || realConsumo > dataPoint[key]) {
+            dataPoint[key] = realConsumo;
+          }
+        }
+      });
 
- // Data specifically for the Bar Chart (Latest visit per Integrado)
- const latestVisitsData = useMemo(() => {
- const latestVisitsMap = new Map<string, Visit>();
- filteredVisits.forEach(v => {
- const existing = latestVisitsMap.get(v.integradoId);
- if (!existing) {
- latestVisitsMap.set(v.integradoId, v);
- } else {
- const vConsumo = Number(v.consumoAcumuladoReal) || 0;
- const exConsumo = Number(existing.consumoAcumuladoReal) || 0;
- 
- if (vConsumo > exConsumo) {
- latestVisitsMap.set(v.integradoId, v);
- } else if (vConsumo === exConsumo) {
- if (new Date(v.date).getTime() > new Date(existing.date).getTime()) {
- latestVisitsMap.set(v.integradoId, v);
- }
- }
- }
- });
+      return dataPoint;
+    });
+  }, [filteredVisits, filteredIntegrados]);
 
- return Array.from(latestVisitsMap.values())
- .filter(v => Number(v.consumoAcumuladoReal) > 0)
- .map(v => {
- const integrado = filteredIntegrados.find(i => i.id === v.integradoId);
- 
- const expected = getExpectedConsumption(Number(v.idade), v.tipoLote, v.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate);
- 
- const abbreviateName = (name?: string) => {
- if (!name) return 'Desconhecido';
- const parts = name.trim().split(' ');
- if (parts.length > 1) {
- return `${parts[0]} ${parts[parts.length - 1][0]}.`;
- }
- return name;
- };
+  // Data specifically for the Bar Chart (Latest visit per Integrado)
+  const latestVisitsData = useMemo(() => {
+    const latestVisitsMap = new Map<string, { visit: Visit; age: number; realConsumo: number }>();
+    filteredVisits.forEach(v => {
+      const matched = filteredIntegrados.find(i => isVisitForIntegrado(v, i));
+      const key = matched ? matched.id : v.integradoId;
+      const age = calculateVisitAge(v, matched);
+      const realConsumo = calculateRealConsumption(v);
 
- return {
- id: v.id,
- integradoId: v.integradoId,
- name: integrado ? abbreviateName(integrado.name) : 'Desconhecido',
- fullName: integrado?.name || 'Desconhecido',
- tipoLote: v.tipoLote || 'Misto',
- date: v.date,
- idade: Number(v.idade),
- consumoReal: Number(v.consumoAcumuladoReal),
- consumoEsperado: expected,
- diferenca: Number((Number(v.consumoAcumuladoReal) - expected).toFixed(2)),
- mortalidade: v.mortalidade,
- animaisMortos: v.animaisMortos,
- animaisAlojados: v.animaisAlojados,
- };
- }).sort((a, b) => {
- switch (sortBy) {
- case 'name-desc':
- return b.name.localeCompare(a.name);
- case 'diferenca-desc':
- return b.diferenca - a.diferenca;
- case 'diferenca-asc':
- return a.diferenca - b.diferenca;
- case 'idade-desc':
- return b.idade - a.idade;
- case 'idade-asc':
- return a.idade - b.idade;
- case 'name-asc':
- default:
- return a.name.localeCompare(b.name);
- }
- });
- }, [filteredVisits, filteredIntegrados, sortBy]);
+      const existing = latestVisitsMap.get(key);
+      if (!existing) {
+        latestVisitsMap.set(key, { visit: v, age, realConsumo });
+      } else {
+        if (realConsumo > existing.realConsumo) {
+          latestVisitsMap.set(key, { visit: v, age, realConsumo });
+        } else if (realConsumo === existing.realConsumo) {
+          if (new Date(v.date).getTime() >= new Date(existing.visit.date).getTime()) {
+            latestVisitsMap.set(key, { visit: v, age, realConsumo });
+          }
+        }
+      }
+    });
 
- const stats = useMemo(() => {
- const totalIntegrados = filteredIntegrados.length;
- // Count alerts only on latest visits
- const alertCount = latestVisitsData.filter(d => d.diferenca < -5 || d.diferenca > 5).length;
- const avgMortalidade = (() => {
- let totalMortos = 0;
- let totalAlojados = 0;
- let sumPercentages = 0;
- let countPercentages = 0;
+    return Array.from(latestVisitsMap.values())
+      .filter(({ realConsumo }) => realConsumo > 0)
+      .map(({ visit: v, age, realConsumo }) => {
+        const integrado = filteredIntegrados.find(i => isVisitForIntegrado(v, i));
+        
+        const expected = getExpectedConsumption(
+          age,
+          v.tipoLote,
+          v.pesoAloj,
+          integrado?.alojamentoDate,
+          integrado?.status,
+          integrado?.fechamentoDate
+        );
+        
+        const mortPct = calculateMortalityRate(v);
 
- latestVisitsData.forEach(d => {
- const mortos = d.animaisMortos !== undefined && d.animaisMortos !== null ? Number(d.animaisMortos) : Number(d.mortalidade || 0);
- const alojados = Number(d.animaisAlojados || 0);
- 
- if (alojados > 0) {
- totalMortos += mortos;
- totalAlojados += alojados;
- } else if (d.mortalidade !== undefined && d.mortalidade !== null) {
- sumPercentages += Number(d.mortalidade);
- countPercentages++;
- }
- });
- 
- if (totalAlojados > 0) {
- return (totalMortos / totalAlojados) * 100;
- } else if (countPercentages > 0) {
- return sumPercentages / countPercentages;
- }
- return 0;
- })();
- const avgDiferenca = latestVisitsData.length > 0
- ? latestVisitsData.reduce((acc, curr) => acc + curr.diferenca, 0) / latestVisitsData.length
- : 0;
- 
- return { totalIntegrados, alertCount, avgMortalidade, avgDiferenca };
- }, [latestVisitsData, filteredIntegrados.length, filteredVisits]);
+        const abbreviateName = (name?: string) => {
+          if (!name) return 'Desconhecido';
+          const parts = name.trim().split(' ');
+          if (parts.length > 1) {
+            return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+          }
+          return name;
+        };
+
+        return {
+          id: v.id,
+          integradoId: v.integradoId,
+          name: integrado ? abbreviateName(integrado.name) : 'Desconhecido',
+          fullName: integrado?.name || 'Desconhecido',
+          tipoLote: v.tipoLote || 'Misto',
+          date: v.date,
+          idade: age,
+          consumoReal: realConsumo,
+          consumoEsperado: expected,
+          diferenca: Number((realConsumo - expected).toFixed(2)),
+          mortalidade: mortPct,
+          animaisMortos: v.animaisMortos,
+          animaisAlojados: v.animaisAlojados,
+        };
+      }).sort((a, b) => {
+        switch (sortBy) {
+          case 'name-desc':
+            return b.name.localeCompare(a.name);
+          case 'diferenca-desc':
+            return b.diferenca - a.diferenca;
+          case 'diferenca-asc':
+            return a.diferenca - b.diferenca;
+          case 'idade-desc':
+            return b.idade - a.idade;
+          case 'idade-asc':
+            return a.idade - b.idade;
+          case 'name-asc':
+          default:
+            return a.name.localeCompare(b.name);
+        }
+      });
+  }, [filteredVisits, filteredIntegrados, sortBy]);
+
+  const stats = useMemo(() => {
+    const totalIntegrados = filteredIntegrados.length;
+    // Count alerts only on latest visits
+    const alertCount = latestVisitsData.filter(d => d.diferenca < -5 || d.diferenca > 5).length;
+    const avgMortalidade = (() => {
+      let totalMortos = 0;
+      let totalAlojados = 0;
+      let sumPercentages = 0;
+      let countPercentages = 0;
+
+      latestVisitsData.forEach(d => {
+        const mortos = d.animaisMortos !== undefined && d.animaisMortos !== null ? Number(d.animaisMortos) : (d.mortalidade !== undefined && Number(d.animaisAlojados || 0) > 0 ? (Number(d.mortalidade) / 100) * Number(d.animaisAlojados || 0) : 0);
+        const alojados = Number(d.animaisAlojados || 0);
+        
+        if (alojados > 0) {
+          totalMortos += mortos;
+          totalAlojados += alojados;
+        } else if (d.mortalidade !== undefined && d.mortalidade !== null) {
+          sumPercentages += Number(d.mortalidade);
+          countPercentages++;
+        }
+      });
+      
+      if (totalAlojados > 0) {
+        return (totalMortos / totalAlojados) * 100;
+      } else if (countPercentages > 0) {
+        return sumPercentages / countPercentages;
+      }
+      return 0;
+    })();
+    const avgDiferenca = latestVisitsData.length > 0
+      ? latestVisitsData.reduce((acc, curr) => acc + curr.diferenca, 0) / latestVisitsData.length
+      : 0;
+    
+    return { totalIntegrados, alertCount, avgMortalidade, avgDiferenca };
+  }, [latestVisitsData, filteredIntegrados.length]);
  const handleExportPDF = async () => {
  if (!dashboardRef.current) return;
  setIsExporting(true);
@@ -507,7 +559,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  </div>
  <p className={`text-lg font-bold flex items-center gap-1 mt-0.5 ${stats.avgDiferenca > 0 ? 'text-blue-600' : stats.avgDiferenca < 0 ? 'text-red-500' : 'text-slate-800'}`}>
  {stats.avgDiferenca > 0 ? <TrendingUp className="w-4 h-4" /> : stats.avgDiferenca < 0 ? <TrendingDown className="w-4 h-4" /> : null}
- {stats.avgDiferenca > 0 ? '+' : ''}{stats.avgDiferenca.toFixed(1)} kg
+ {stats.avgDiferenca > 0 ? '+' : ''}{stats.avgDiferenca.toFixed(2)} kg
  </p>
  </div>
  <p className="text-[10px] text-slate-500 font-medium mt-1 relative z-10">Em relação à curva alvo</p>
@@ -732,7 +784,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  fill="#64748b" 
  fontSize={10} 
  fontWeight={500}
- formatter={(val: any) => val > 0 ? `+${Number(val).toFixed(1)}` : Number(val).toFixed(1)}
+ formatter={(val: any) => val > 0 ? `+${Number(val).toFixed(2)}` : Number(val).toFixed(2)}
  />
  </Bar>
  </BarChart>
@@ -807,7 +859,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  </div>
  <div>
  <p className="text-xs text-slate-500 font-medium">Idade Atual</p>
- <p className="text-sm font-semibold text-slate-800">{filteredVisits.length > 0 ? Math.max(...filteredVisits.map(v => v.idade || 0)) : 0} dias</p>
+ <p className="text-sm font-semibold text-slate-800">{filteredVisits.length > 0 ? Math.max(...filteredVisits.map(v => calculateVisitAge(v, filteredIntegrados[0]))) : 0} dias</p>
  </div>
  <div>
  <p className="text-xs text-slate-500 font-medium">Desvio Atual</p>
@@ -832,14 +884,18 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  </thead>
  <tbody className="divide-y divide-slate-100">
  {filteredVisits.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((v) => {
- const dif = v.consumoAcumuladoReal ? v.consumoAcumuladoReal - (v.metaAcumulada || 0) : 0;
+ const singleIntegrado = filteredIntegrados[0];
+ const age = calculateVisitAge(v, singleIntegrado);
+ const realConsumo = calculateRealConsumption(v);
+ const expected = getExpectedConsumption(age, v.tipoLote, v.pesoAloj, singleIntegrado?.alojamentoDate, singleIntegrado?.status, singleIntegrado?.fechamentoDate);
+ const dif = realConsumo > 0 ? Number((realConsumo - expected).toFixed(2)) : 0;
  const hasTratamentos = v.tratamentos && v.tratamentos.length > 0;
  return (
  <tr key={v.id} className="hover:bg-slate-50">
  <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{v.date.split('-').reverse().join('/')}</td>
- <td className="px-4 py-3 text-slate-700 text-center">{v.idade}</td>
- <td className="px-4 py-3 text-slate-700 text-right font-medium">{v.consumoAcumuladoReal}</td>
- <td className="px-4 py-3 text-slate-700 text-right">{v.metaAcumulada?.toFixed(2)}</td>
+ <td className="px-4 py-3 text-slate-700 text-center">{age}</td>
+ <td className="px-4 py-3 text-slate-700 text-right font-medium">{realConsumo.toFixed(2)}</td>
+ <td className="px-4 py-3 text-slate-700 text-right">{expected.toFixed(2)}</td>
  <td className={`px-4 py-3 font-semibold text-right ${dif > 0 ? 'text-red-600' : dif < 0 ? 'text-emerald-600' : 'text-slate-700'}`}>
  {dif > 0 ? '+' : ''}{dif.toFixed(2)}
  </td>

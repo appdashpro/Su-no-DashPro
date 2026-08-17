@@ -1,11 +1,11 @@
-import { Integrado, Visit } from '../types';
+import { Integrado, Visit, isVisitForIntegrado } from '../types';
 import { getActiveCurve, getExpectedConsumption } from '../data';
 
 export interface PriorityScore {
   score: number;
   reasons: string[];
   smartActions: string[];
-  daysSinceLastVisit: number;
+  daysSinceLastVisit: number | null;
   mortality: number;
   projectedMortality: number;
   treatmentsCount: number;
@@ -13,9 +13,26 @@ export interface PriorityScore {
   age: number;
 }
 
+function getCalendarDaysDiff(fromDateStr: string, toDate: Date = new Date()): number {
+  if (!fromDateStr) return 0;
+  const dateOnly = fromDateStr.split('T')[0];
+  const parts = dateOnly.split('-');
+  if (parts.length === 3) {
+    const y1 = parseInt(parts[0], 10);
+    const m1 = parseInt(parts[1], 10) - 1;
+    const d1 = parseInt(parts[2], 10);
+    if (!isNaN(y1) && !isNaN(m1) && !isNaN(d1)) {
+      const utc1 = Date.UTC(y1, m1, d1);
+      const utc2 = Date.UTC(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+      return Math.max(0, Math.round((utc2 - utc1) / (1000 * 60 * 60 * 24)));
+    }
+  }
+  return 0;
+}
+
 export function calculatePriority(integrado: Integrado, allVisits: Visit[]): PriorityScore {
   const visits = allVisits
-    .filter(v => v.integradoId === integrado.id)
+    .filter(v => isVisitForIntegrado(v, integrado))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     
   let score = 0;
@@ -24,12 +41,8 @@ export function calculatePriority(integrado: Integrado, allVisits: Visit[]): Pri
   
   const today = new Date();
   let currentAge = 1;
-  let alojamentoDate: Date | null = null;
   if (integrado.alojamentoDate) {
-    alojamentoDate = new Date(integrado.alojamentoDate + 'T12:00:00');
-    if (!isNaN(alojamentoDate.getTime())) {
-      currentAge = Math.max(0, Math.floor((today.getTime() - alojamentoDate.getTime()) / (1000 * 60 * 60 * 24)));
-    }
+    currentAge = Math.max(0, getCalendarDaysDiff(integrado.alojamentoDate, today));
   }
   
   if (visits.length === 0) {
@@ -40,11 +53,11 @@ export function calculatePriority(integrado: Integrado, allVisits: Visit[]): Pri
       score: 100,
       reasons: ['Lote sem nenhuma visita registrada (Urgente)'],
       smartActions,
-      daysSinceLastVisit: 999,
+      daysSinceLastVisit: null,
       mortality: 0,
       projectedMortality: 0,
       treatmentsCount: 0,
-      feedDeviation: 0,
+      feedDeviation: null,
       age: currentAge
     };
   }
@@ -52,17 +65,16 @@ export function calculatePriority(integrado: Integrado, allVisits: Visit[]): Pri
   const latestVisit = visits[0];
   let ageAtVisit = latestVisit.idade;
   if (!ageAtVisit || isNaN(ageAtVisit)) {
-    const vDate = new Date(latestVisit.date + 'T12:00:00');
-    if (alojamentoDate && !isNaN(alojamentoDate.getTime())) {
-      ageAtVisit = Math.max(1, Math.floor((vDate.getTime() - alojamentoDate.getTime()) / (1000 * 60 * 60 * 24)));
+    if (integrado.alojamentoDate) {
+      const visitDate = new Date(latestVisit.date + 'T12:00:00');
+      ageAtVisit = Math.max(1, getCalendarDaysDiff(integrado.alojamentoDate, visitDate));
     } else {
       ageAtVisit = 1;
     }
   }
   
-  // 1. Time since last visit
-  const lastVisitDate = new Date(latestVisit.date + 'T12:00:00');
-  const daysSinceLastVisit = Math.max(0, Math.floor((today.getTime() - lastVisitDate.getTime()) / (1000 * 60 * 60 * 24)));
+  // 1. Time since last visit (calculated as pure calendar days to avoid timezone/hour issues)
+  const daysSinceLastVisit = getCalendarDaysDiff(latestVisit.date, today);
   
   if (daysSinceLastVisit > 10) {
     score += Math.min(25, (daysSinceLastVisit - 10) * 2 + 5); 
@@ -108,9 +120,9 @@ export function calculatePriority(integrado: Integrado, allVisits: Visit[]): Pri
   if (visitWithFeed) {
     let feedAge = Number(visitWithFeed.idade) || 0;
     if (feedAge === 0) {
-      const vDate = new Date(visitWithFeed.date + 'T12:00:00');
-      if (alojamentoDate && !isNaN(alojamentoDate.getTime())) {
-        feedAge = Math.max(1, Math.floor((vDate.getTime() - alojamentoDate.getTime()) / (1000 * 60 * 60 * 24)));
+      if (integrado.alojamentoDate) {
+        const visitDate = new Date(visitWithFeed.date + 'T12:00:00');
+        feedAge = Math.max(1, getCalendarDaysDiff(integrado.alojamentoDate, visitDate));
       } else {
         feedAge = 1;
       }

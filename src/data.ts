@@ -1093,10 +1093,10 @@ function parsePdfData() {
   
   const lines = pdfData.trim().split('\n');
   lines.forEach((line, index) => {
-    const match = line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(\d{2}\/\d{2}\/\d{4})\s+(-?\d+)\s+(.+?)\s+(Automático|Linear|Misto|Multitratos|Basculante|Robô|automático com\s+água)\s+([^\d]+)\s+([\d.]+)\s+(\d+)$/i);
+    const match = line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(\d{2}\/\d{2}\/\d{4})\s+(-?\d+)\s+(.+?)\s+(Automático|Linear|Misto|Multitratos|Basculante|Robô|automático com\s+água)\s+([^\d]+)\s+([\d.]+)\s+(\d+)(?:\s+(\d+))?(?:\s+([\d.]+))?$/i);
     
     if (match) {
-      const [, dateStr, name, alojamentoStr, idadeStr, rec, comedouro, colab, consumoStr, mortStr] = match;
+      const [, dateStr, name, alojamentoStr, idadeStr, rec, comedouro, colab, consumoStr, mortStr, alojadosStr, pesoAlojStr] = match;
       
       const id = `i_${name.replace(/\s+/g, '').toLowerCase()}`;
       if (!integradosMap.has(id)) {
@@ -1109,9 +1109,26 @@ function parsePdfData() {
       }
       
       let parsedComedouro = 'Automático';
-      if (comedouro.toLowerCase().includes('linear')) parsedComedouro = 'Linear';
-      if (comedouro.toLowerCase().includes('misto')) parsedComedouro = 'Misto';
+      const cLow = comedouro.toLowerCase();
+      if (cLow.includes('linear')) parsedComedouro = 'Linear';
+      else if (cLow.includes('misto') || cLow.includes('multitratos') || cLow.includes('basculante') || cLow.includes('robô')) parsedComedouro = 'Misto';
       
+      const animaisMortos = parseInt(mortStr, 10) || 0;
+      const alojNum = alojadosStr ? parseInt(alojadosStr, 10) : 0;
+      const animaisAlojados = alojNum > 0 ? alojNum : undefined;
+      const mortalidadePct = (animaisAlojados && animaisAlojados > 0) 
+        ? Number(((animaisMortos / animaisAlojados) * 100).toFixed(2)) 
+        : (animaisMortos > 0 ? undefined : 0);
+      const pesoAloj = (pesoAlojStr && parseFloat(pesoAlojStr) > 0) ? parseFloat(pesoAlojStr) : undefined;
+      const consumoAcumuladoReal = parseFloat(consumoStr) || 0;
+
+      const activeCurveInfo = getActiveCurve(
+        alojamentoStr.split('/').reverse().join('-'),
+        'Em andamento',
+        'Misto'
+      );
+      const metas = activeCurveInfo.metas;
+
       visits.push({
         id: `v_${id}_${index}`,
         integradoId: id,
@@ -1120,8 +1137,18 @@ function parsePdfData() {
         recomendacao: rec.trim(),
         comedouro: parsedComedouro as 'Automático' | 'Linear' | 'Misto',
         colaborador: colab.trim(),
-        consumoAcumuladoReal: parseFloat(consumoStr) || 0,
-        mortalidade: parseInt(mortStr, 10) || 0
+        consumoAcumuladoReal,
+        mortalidade: mortalidadePct,
+        animaisMortos,
+        animaisAlojados,
+        pesoAloj,
+        metaAlojamento: metas.metaAlojamento,
+        metaCrescimento1: metas.metaCrescimento1,
+        metaCrescimento2: metas.metaCrescimento2,
+        metaCrescimento3: metas.metaCrescimento3,
+        metaTerminacao1: metas.metaTerminacao1,
+        metaTerminacao2: metas.metaTerminacao2,
+        metaAcumulada: metas.metaAcumulada
       });
     }
   });

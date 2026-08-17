@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Users, ClipboardList, LineChart, AlertCircle, HelpCircle } from 'lucide-react';
+import { Home, Activity, Users, ClipboardList, LineChart, AlertCircle, HelpCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface SidebarProps {
@@ -13,6 +13,7 @@ const navItems = [
   { id: 'dashboard', label: 'Visão Geral', icon: Home },
   { id: 'visitas', label: 'Visitas', icon: ClipboardList },
   { id: 'integrados', label: 'Gestão de Lotes', icon: Users },
+  { id: 'medicamentos', label: 'Medicamentos', icon: Activity },
   { id: 'curva', label: 'Curva de Referência', icon: LineChart },
   { id: 'importar', label: 'Importar Dados', icon: ClipboardList },
 ];

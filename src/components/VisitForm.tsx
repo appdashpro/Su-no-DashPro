@@ -1,6 +1,6 @@
 import { safeStorage } from "../lib/safeStorage";
 import React, { useState } from 'react';
-import { Visit, Integrado } from '../types';
+import { Visit, Integrado, isVisitForIntegrado } from '../types';
 import { growthCurve, growthCurveFemea, getExpectedConsumption, getExpectedWeight, defaultMetas, defaultMetasFemea, getActiveCurve } from '../data';
 import { Info } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
@@ -19,7 +19,7 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  const [formData, setFormData] = useState<Partial<Visit> & { alojamentoDate?: string, integradoNome?: string }>(() => {
  if (initialData) {
  const integrado = integrados.find(i => i.id === initialData.integradoId);
- const { metas } = getActiveCurve(integrado?.alojamentoDate, integrado?.status, initialData.tipoLote || formData.tipoLote, integrado?.fechamentoDate);
+ const { metas } = getActiveCurve(integrado?.alojamentoDate, integrado?.status, initialData.tipoLote || 'Misto', integrado?.fechamentoDate);
  return {
  ...initialData,
  tipoLote: initialData.tipoLote || 'Misto',
@@ -57,21 +57,44 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  if (saving) return;
  setSaving(true);
  const { alojamentoDate, integradoNome, ...visitData } = formData;
- const integradoId = `i_${(integradoNome || '').replace(/\s+/g, '').toLowerCase()}_${(alojamentoDate || '').replace(/[-/]/g, '')}`;
+ let targetIntegradoId = initialData?.integradoId;
+ if (!targetIntegradoId) {
+   const matchExact = integrados.find(i => 
+     (i.name || '').trim().toLowerCase() === (integradoNome || '').trim().toLowerCase() && 
+     (!alojamentoDate || i.alojamentoDate === alojamentoDate)
+   );
+   if (matchExact) {
+     targetIntegradoId = matchExact.id;
+   } else {
+     const matchName = integrados.find(i => 
+       (i.name || '').trim().toLowerCase() === (integradoNome || '').trim().toLowerCase() && 
+       i.status === 'Em andamento'
+     );
+     if (matchName) {
+       targetIntegradoId = matchName.id;
+     } else {
+       targetIntegradoId = crypto.randomUUID();
+     }
+   }
+ }
+ const integradoId = targetIntegradoId;
  if (!initialData) safeStorage.removeItem('VISIT_FORM_DRAFT');
 
  onSave({
  ...visitData,
- id: initialData ? initialData.id : `v_${crypto.randomUUID()}`,
+ id: initialData ? initialData.id : crypto.randomUUID(),
  integradoId,
  idade: Number(visitData.idade) || 0,
- consumoAcumuladoReal: visitData.consumoAcumuladoReal ? Number(visitData.consumoAcumuladoReal) : undefined,
- mortalidade: visitData.mortalidade !== undefined && visitData.mortalidade !== null ? Number(visitData.mortalidade) : undefined,
- animaisAlojados: visitData.animaisAlojados ? Number(visitData.animaisAlojados) : undefined,
- animaisMortos: visitData.animaisMortos ? Number(visitData.animaisMortos) : undefined,
- volumeTotalCargas: visitData.volumeTotalCargas ? Number(visitData.volumeTotalCargas) : undefined,
- pesoAloj: visitData.pesoAloj ? Number(visitData.pesoAloj) : undefined,
- pontuacaoSanitaria: visitData.pontuacaoSanitaria ? Number(visitData.pontuacaoSanitaria) : undefined,
+ consumoAcumuladoReal: visitData.consumoAcumuladoReal !== undefined && visitData.consumoAcumuladoReal !== null && String(visitData.consumoAcumuladoReal).trim() !== '' ? Number(visitData.consumoAcumuladoReal) : undefined,
+ mortalidade: visitData.mortalidade !== undefined && visitData.mortalidade !== null && String(visitData.mortalidade).trim() !== '' ? Number(visitData.mortalidade) : undefined,
+ animaisAlojados: visitData.animaisAlojados !== undefined && visitData.animaisAlojados !== null && String(visitData.animaisAlojados).trim() !== '' ? Number(visitData.animaisAlojados) : undefined,
+ animaisMortos: visitData.animaisMortos !== undefined && visitData.animaisMortos !== null && String(visitData.animaisMortos).trim() !== '' ? Number(visitData.animaisMortos) : undefined,
+ descartesPeriodo: visitData.descartesPeriodo !== undefined && visitData.descartesPeriodo !== null && String(visitData.descartesPeriodo).trim() !== '' ? Number(visitData.descartesPeriodo) : undefined,
+ sobraSiloKg: visitData.sobraSiloKg !== undefined && visitData.sobraSiloKg !== null && String(visitData.sobraSiloKg).trim() !== '' ? Number(visitData.sobraSiloKg) : undefined,
+ pesoAmostradoKg: visitData.pesoAmostradoKg !== undefined && visitData.pesoAmostradoKg !== null && String(visitData.pesoAmostradoKg).trim() !== '' ? Number(visitData.pesoAmostradoKg) : undefined,
+ volumeTotalCargas: visitData.volumeTotalCargas !== undefined && visitData.volumeTotalCargas !== null && String(visitData.volumeTotalCargas).trim() !== '' ? Number(visitData.volumeTotalCargas) : undefined,
+ pesoAloj: visitData.pesoAloj !== undefined && visitData.pesoAloj !== null && String(visitData.pesoAloj).trim() !== '' ? Number(visitData.pesoAloj) : undefined,
+ pontuacaoSanitaria: visitData.pontuacaoSanitaria !== undefined && visitData.pontuacaoSanitaria !== null && String(visitData.pontuacaoSanitaria).trim() !== '' ? Number(visitData.pontuacaoSanitaria) : undefined,
  } as Visit, integradoNome, alojamentoDate);
  };
 
@@ -80,8 +103,10 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  
  let updates: any = { [name]: value };
  
- if (name === 'tipoLote') {
- const metas = value === 'Fêmea' ? defaultMetasFemea : defaultMetas;
+ if (name === 'tipoLote' || name === 'alojamentoDate') {
+ const activeTipo = name === 'tipoLote' ? value : formData.tipoLote;
+ const activeAlojDate = name === 'alojamentoDate' ? value : formData.alojamentoDate;
+ const { metas } = getActiveCurve(activeAlojDate, undefined, activeTipo);
  updates = {
  ...updates,
  ...metas
@@ -146,7 +171,8 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  // Auto-calculate consumos when cargas change or mortos change
  const alojados = Number(newData.animaisAlojados) || 0;
  const mortos = Number(newData.animaisMortos) || 0;
- const vivos = alojados - mortos;
+    const descartes = Number(newData.descartesPeriodo) || 0;
+    const vivos = alojados - mortos - descartes;
  
  if (alojados > 0) {
  newData.mortalidade = Number(((mortos / alojados) * 100).toFixed(2));
@@ -165,8 +191,22 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  // volumeTotalCargas is always the sum of all specific cargas
  const sumCargas = (Number(newData.cargaAlojamento) || 0) + (Number(newData.cargaCrescimento1) || 0) + (Number(newData.cargaCrescimento2) || 0) + (Number(newData.cargaCrescimento3) || 0) + (Number(newData.cargaTerminacao1) || 0) + (Number(newData.cargaTerminacao2) || 0);
  
- newData.volumeTotalCargas = sumCargas > 0 ? sumCargas : undefined;
- newData.consumoAcumuladoReal = sumCargas > 0 ? Number((sumCargas / vivos).toFixed(2)) : undefined;
+ 
+  if (name.startsWith('carga')) {
+    newData.volumeTotalCargas = sumCargas > 0 ? sumCargas : undefined;
+ }
+
+ const currentVolumeTotal = Number(newData.volumeTotalCargas) || sumCargas;
+ const sobraSilo = Number(newData.sobraSiloKg) || 0;
+ const volumeSubtracted = currentVolumeTotal - sobraSilo;
+ 
+ if (name.startsWith('carga') || name === 'volumeTotalCargas' || name === 'animaisAlojados' || name === 'animaisMortos' || name === 'descartesPeriodo' || name === 'sobraSiloKg') {
+    if (volumeSubtracted > 0 && vivos > 0) {
+        newData.consumoAcumuladoReal = Number((volumeSubtracted / vivos).toFixed(2));
+    } else if (name.startsWith('carga')) {
+        newData.consumoAcumuladoReal = undefined;
+    }
+ }
  }
 
  if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') && newData.date && newData.alojamentoDate) {
@@ -183,8 +223,12 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  });
  };
 
- const currentIntegradoId = initialData?.integradoId || `i_${(formData.integradoNome || '').replace(/\s+/g, '').toLowerCase()}_${(formData.alojamentoDate || '').replace(/[-/]/g, '')}`;
- const integrado = integrados.find(i => i.id === currentIntegradoId);
+ const matchingIntegrado = integrados.find(i => 
+   (initialData && i.id === initialData.integradoId) ||
+   ((i.name || '').trim().toLowerCase() === (formData.integradoNome || '').trim().toLowerCase() && (!formData.alojamentoDate || i.alojamentoDate === formData.alojamentoDate))
+ );
+ const currentIntegradoId = matchingIntegrado?.id || initialData?.integradoId || `i_${(formData.integradoNome || '').replace(/\s+/g, '').toLowerCase()}_${(formData.alojamentoDate || '').replace(/[-/]/g, '')}`;
+ const integrado = matchingIntegrado || integrados.find(i => i.id === currentIntegradoId);
  const currentIdade = Number(formData.idade) || 0;
  const expectedConsumption = currentIdade > 0 ? getExpectedConsumption(currentIdade, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate) : null;
  const expectedWeight = currentIdade > 0 ? getExpectedWeight(currentIdade, formData.tipoLote as any, formData.pesoAloj) : null;
@@ -208,7 +252,7 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  const currentDiffPct = (currentDiffKg !== null && expectedConsumption && expectedConsumption > 0) ? (currentDiffKg / expectedConsumption * 100) : null;
 
  const prevVisit = [...visits]
- .filter(v => v.integradoId === currentIntegradoId && (!initialData || v.id !== initialData.id) && new Date(v.date).getTime() < new Date(formData.date || new Date().toISOString()).getTime())
+ .filter(v => (integrado ? isVisitForIntegrado(v, integrado) : v.integradoId === currentIntegradoId) && (!initialData || v.id !== initialData.id) && new Date(v.date).getTime() < new Date(formData.date || new Date().toISOString()).getTime())
  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 
  let prevVisitInfo = null;
@@ -222,7 +266,7 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  const diffKg = prevReal - prevExpected;
  const diffPct = (diffKg / prevExpected * 100);
  const status = diffKg > 0 ? 'acima' : diffKg < 0 ? 'abaixo' : 'dentro';
- diffInfo = `${Math.abs(diffKg).toFixed(2)} kg ${status} do esperado (${Math.abs(diffPct).toFixed(1)}%)`;
+ diffInfo = `${Math.abs(diffKg).toFixed(2)} kg ${status} do esperado (${Math.abs(diffPct).toFixed(2)}%)`;
  } else {
  diffInfo = 'Sem dados de consumo na última visita.';
  }
@@ -320,7 +364,7 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  <div className="flex flex-col gap-1 text-slate-600">
  <span className="font-medium text-slate-800 mb-1">Resumo Automático do Lote</span>
  <span className="flex items-center gap-2">Idade calculada: <strong className="text-blue-900">{currentIdade} dias</strong></span>
- <span className="flex items-center gap-2">Animais Vivos: <strong className="text-blue-900">{(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0)}</strong> <span className="text-xs text-slate-500">({formData.animaisAlojados || 0} alojados)</span></span>
+ <span className="flex items-center gap-2">Animais Vivos: <strong className="text-blue-900">{(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0) - (Number(formData.descartesPeriodo) || 0)}</strong> <span className="text-xs text-slate-500">({formData.animaisAlojados || 0} alojados)</span></span>
  </div>
  <div className="flex flex-col gap-1 text-slate-600 md:text-right mt-3 md:mt-0">
  <span className="flex items-center gap-2 justify-end">Peso Esperado: <strong className="text-blue-900">{expectedWeight ? expectedWeight.toFixed(2) : '-'} kg</strong></span>
@@ -329,7 +373,7 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  <span className="flex items-center gap-2 justify-end">Consumo Real (Calculado): <strong className={currentDiffKg !== null && Math.abs(currentDiffKg) <= 5 ? 'text-blue-600' : currentDiffKg !== null && currentDiffKg > 5 ? 'text-red-600' : currentDiffKg !== null && currentDiffKg < -5 ? 'text-emerald-600' : 'text-slate-600'}>{formData.consumoAcumuladoReal || '-'} kg/cab</strong></span>
  {currentDiffKg !== null && currentDiffPct !== null && (
  <span className={`flex items-center gap-2 justify-end text-xs font-semibold ${Math.abs(currentDiffKg) <= 5 ? 'text-blue-600' : currentDiffKg > 5 ? 'text-red-600' : 'text-emerald-600'}`}>
- Diferença: {currentDiffKg > 0 ? '+' : ''}{currentDiffKg.toFixed(2)} kg ({currentDiffKg > 0 ? '+' : ''}{currentDiffPct.toFixed(1)}%)
+ Diferença: {currentDiffKg > 0 ? '+' : ''}{currentDiffKg.toFixed(2)} kg ({currentDiffKg > 0 ? '+' : ''}{currentDiffPct.toFixed(2)}%)
  </span>
  )}
 
@@ -370,7 +414,7 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  <label className="block text-xs font-semibold text-slate-500 mb-1 flex justify-between items-center">
  <span>Animais Mortos</span>
  {formData.mortalidade !== undefined && formData.mortalidade !== null && !isNaN(Number(formData.mortalidade)) && (
- <span className="flex items-center gap-2"><span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[10px]">{(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0)} vivos</span><span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded text-[10px]">{formData.mortalidade}%</span></span>
+ <span className="flex items-center gap-2"><span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[10px]">{(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0) - (Number(formData.descartesPeriodo) || 0)} vivos</span><span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded text-[10px]">{Number(formData.mortalidade || 0).toFixed(2)}%</span></span>
  )}
  </label>
  <input 
@@ -380,6 +424,17 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  onChange={handleChange}
  placeholder="Ex: 5"
  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+ />
+ </div>
+ <div className="space-y-2">
+ <label className="block text-xs font-semibold text-slate-500 mb-1">Descartes / Refugos</label>
+ <input
+  type="number"
+  name="descartesPeriodo"
+  value={formData.descartesPeriodo ?? ''}
+  onChange={handleChange}
+  placeholder="Ex: 2"
+  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
  />
  </div>
 
@@ -434,13 +489,36 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
  />
  </div>
+ <div className="space-y-2">
+ <label className="block text-xs font-semibold text-slate-500 mb-1">Peso Amostrado (kg)</label>
+ <input
+  type="number"
+  step="0.01"
+  name="pesoAmostradoKg"
+  value={formData.pesoAmostradoKg ?? ''}
+  onChange={handleChange}
+  placeholder="Ex: 85.5"
+  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+ />
+ </div>
+ <div className="space-y-2">
+ <label className="block text-xs font-semibold text-slate-500 mb-1">Sobra no Silo (kg)</label>
+ <input
+  type="number"
+  name="sobraSiloKg"
+  value={formData.sobraSiloKg ?? ''}
+  onChange={handleChange}
+  placeholder="Ao encerrar"
+  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+ />
+ </div>
  </div>
 
  <TratamentosFormSection 
  tratamentos={formData.tratamentos || []}
  onChange={(tratamentos) => setFormData(prev => ({ ...prev, tratamentos }))}
  idade={Number(formData.idade) || 0}
- animaisVivos={(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0)}
+ animaisVivos={(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0) - (Number(formData.descartesPeriodo) || 0)}
  tipoLote={formData.tipoLote as any || 'Misto'}
  alojamentoDate={formData.alojamentoDate}
  />
@@ -500,7 +578,7 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  <td className="py-2 pr-2 md:pr-4 text-xs md:text-sm font-medium">
  {diff !== null && diffPct !== null ? (
  <span className={Math.abs(diff) <= 1 ? 'text-blue-600' : diff > 1 ? 'text-red-600' : 'text-emerald-600'}>
- {diff > 0 ? '+' : ''}{diff.toFixed(2)} kg ({diff > 0 ? '+' : ''}{diffPct.toFixed(1)}%)
+ {diff > 0 ? '+' : ''}{diff.toFixed(2)} kg ({diff > 0 ? '+' : ''}{diffPct.toFixed(2)}%)
  </span>
  ) : '-'}
  </td>
@@ -509,12 +587,12 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  </tbody>
  <tfoot className="border-t-2 border-slate-200 font-semibold bg-slate-50">
  <tr>
- <td className="py-3 pr-2 md:pr-4 pl-2 text-slate-700 text-xs md:text-sm">TOTAL ACUMULADO</td>
+ <td className="py-3 pr-2 md:pr-4 pl-2 text-slate-700 text-xs md:text-sm">TOTAL ACUMULADO<br/><span className="text-[10px] font-normal text-slate-500">(Editável se faltar fase)</span></td>
  <td className="py-3 pr-2 md:pr-4">
- <input type="number" step="0.01" name="volumeTotalCargas" value={formData.volumeTotalCargas || ''} onChange={handleChange} className="w-full border border-slate-200 rounded p-1.5 text-xs md:text-sm font-bold bg-slate-100 focus:ring-2 focus:ring-blue-500 outline-none" readOnly placeholder="0.00" />
+ <input type="number" step="0.01" name="volumeTotalCargas" value={formData.volumeTotalCargas ?? ''} onChange={handleChange} className="w-full border border-slate-300 rounded p-1.5 text-xs md:text-sm font-bold bg-white focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00" />
  </td>
  <td className="py-3 pr-2 md:pr-4">
- <input type="number" step="0.01" name="consumoAcumuladoReal" value={formData.consumoAcumuladoReal || ''} onChange={handleChange} className={`w-full border border-slate-200 rounded p-1.5 text-xs md:text-sm font-bold bg-slate-100 focus:ring-2 focus:ring-blue-500 outline-none ${currentDiffKg !== null && Math.abs(currentDiffKg) <= 5 ? 'text-blue-600' : currentDiffKg !== null && currentDiffKg > 5 ? 'text-red-600' : currentDiffKg !== null && currentDiffKg < -5 ? 'text-emerald-600' : 'text-slate-700'}`} readOnly placeholder="0.00" />
+ <input type="number" step="0.01" name="consumoAcumuladoReal" value={formData.consumoAcumuladoReal ?? ''} onChange={handleChange} className={`w-full border border-slate-300 rounded p-1.5 text-xs md:text-sm font-bold bg-white focus:ring-2 focus:ring-blue-500 outline-none ${currentDiffKg !== null && Math.abs(currentDiffKg) <= 5 ? 'text-blue-600' : currentDiffKg !== null && currentDiffKg > 5 ? 'text-red-600' : currentDiffKg !== null && currentDiffKg < -5 ? 'text-emerald-600' : 'text-slate-700'}`} placeholder="0.00" />
  </td>
  <td className="py-3 pr-2 md:pr-4 text-slate-500 text-xs md:text-sm">
  {formData.metaAcumulada || '-'}

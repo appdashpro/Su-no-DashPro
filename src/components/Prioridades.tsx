@@ -196,21 +196,21 @@ export function Prioridades({ integrados, visits, onNavigateToIntegrado }: Props
                         <td className="px-5 py-5 min-w-[200px]">
                           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
                             <div className="flex items-center gap-1.5" title="Dias sem visita">
-                              <Clock className={`h-3.5 w-3.5 ${item.daysSinceLastVisit > 7 ? 'text-red-500' : 'text-slate-400'}`} />
-                              <span className={item.daysSinceLastVisit > 7 ? 'text-red-700 font-bold' : 'text-slate-600 font-medium'}>
-                                {item.daysSinceLastVisit > 1000 ? 'N/A' : `${item.daysSinceLastVisit}d`}
+                              <Clock className={`h-3.5 w-3.5 ${item.daysSinceLastVisit === null || item.daysSinceLastVisit > 7 ? 'text-red-500' : item.daysSinceLastVisit === 0 ? 'text-emerald-500' : 'text-slate-400'}`} />
+                              <span className={item.daysSinceLastVisit === null || item.daysSinceLastVisit > 7 ? 'text-red-700 font-bold' : item.daysSinceLastVisit === 0 ? 'text-emerald-700 font-medium' : 'text-slate-600 font-medium'}>
+                                {item.daysSinceLastVisit === null ? 'Sem visita' : item.daysSinceLastVisit === 0 ? 'Hoje' : `${item.daysSinceLastVisit}d`}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5" title="Desvio de Consumo">
                               <TrendingDown className={`h-3.5 w-3.5 ${item.feedDeviation !== null && item.feedDeviation < -2 ? 'text-red-500' : 'text-slate-400'}`} />
                               <span className={item.feedDeviation !== null && item.feedDeviation < -2 ? 'text-red-700 font-bold' : 'text-slate-600 font-medium'}>
-                                {item.feedDeviation !== null ? `${item.feedDeviation > 0 ? '+' : ''}${item.feedDeviation.toFixed(1)}kg` : 'N/A'}
+                                {item.feedDeviation !== null ? `${item.feedDeviation > 0 ? '+' : ''}${item.feedDeviation.toFixed(2)}kg` : 'N/A'}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5" title="Mortalidade Atual">
                               <Activity className={`h-3.5 w-3.5 ${item.mortality >= 2.5 ? 'text-red-500' : 'text-slate-400'}`} />
                               <span className={item.mortality >= 2.5 ? 'text-red-700 font-bold' : 'text-slate-600 font-medium'}>
-                                {item.mortality.toFixed(1)}%
+                                {item.mortality.toFixed(2)}%
                               </span>
                             </div>
                             {item.treatmentsCount > 0 && (

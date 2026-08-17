@@ -1,7 +1,7 @@
 import { safeStorage } from "./lib/safeStorage";
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Tutorial } from './components/Tutorial';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Prioridades } from './components/Prioridades';
 import { Dashboard } from './components/Dashboard';
@@ -14,6 +14,7 @@ import { ReferenceCurve } from './components/ReferenceCurve';
 import { ImportData } from './components/ImportData';
 import { Login } from './components/Login';
 import { Notifications } from './components/Notifications';
+import { MedicationAnalysis } from './components/MedicationAnalysis';
 import { Visit, Integrado } from './types';
 import { Menu, X, LogOut, Download, Wifi, WifiOff, RefreshCw, Moon, Sun, Users, ClipboardList } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -21,6 +22,52 @@ import { storage } from './lib/storage';
 import { supabase } from './lib/supabase';
 import { saveBackupToIndexedDB } from './lib/backup';
 
+// Exponential backoff helper for network requests
+async function executeWithExponentialBackoff<T>(
+  task: () => Promise<T>,
+  options: {
+    maxRetries?: number;
+    initialDelayMs?: number;
+    maxDelayMs?: number;
+    onRetry?: (attempt: number, delayMs: number, error: any) => void;
+    shouldRetry?: (error: any) => boolean;
+  } = {}
+): Promise<T> {
+  const {
+    maxRetries = 3,
+    initialDelayMs = 1200,
+    maxDelayMs = 15000,
+    onRetry,
+    shouldRetry = (err: any) => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+      const msg = String(err?.message || err || '');
+      // Non-retryable database schema / permission errors
+      if (err?.code && String(err.code).startsWith('PGRST') && !msg.includes('fetch') && !msg.includes('Failed')) return false;
+      if (msg.includes('relation') || msg.includes('column') || msg.includes('constraint')) return false;
+      return true;
+    }
+  } = options;
+
+  let attempt = 0;
+  while (true) {
+    try {
+      return await task();
+    } catch (err: any) {
+      attempt++;
+      if (attempt > maxRetries || !shouldRetry(err)) {
+        throw err;
+      }
+      const exponentialDelay = initialDelayMs * Math.pow(2, attempt - 1);
+      const jitter = Math.random() * (exponentialDelay * 0.25);
+      const delay = Math.min(maxDelayMs, Math.round(exponentialDelay + jitter));
+
+      if (onRetry) {
+        onRetry(attempt, delay, err);
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
 
 export default function App() {
   
@@ -34,6 +81,7 @@ export default function App() {
  
  const [integrados, setIntegrados] = useState<Integrado[]>([]);
  const [visits, setVisits] = useState<Visit[]>([]);
+  const [pendingSyncIds, setPendingSyncIds] = useState<string[]>([]);
  const [loading, setLoading] = useState(true);
  const [session, setSession] = useState<any>(null);
  const [dbError, setDbError] = useState<string | null>(null);
@@ -46,8 +94,12 @@ export default function App() {
  const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? window.navigator.onLine : true);
 
  const [isSyncing, setIsSyncing] = useState(false);
+ const [syncRetryStatus, setSyncRetryStatus] = useState<string | null>(null);
  const [lastSyncTime, setLastSyncTime] = useState<string | null>(typeof window !== 'undefined' ? safeStorage.getItem('LAST_SYNC_TIME') : null);
  const [lastSyncUser, setLastSyncUser] = useState<string | null>(typeof window !== 'undefined' ? safeStorage.getItem('LAST_SYNC_USER') : null);
+
+ const retryTimeoutRef = useRef<any>(null);
+ const isSyncInProgressRef = useRef(false);
 
  useEffect(() => {
  if (isVisitFormOpen) {
@@ -90,45 +142,18 @@ export default function App() {
  }
  }, [isDarkMode]);
 
-
- useEffect(() => {
- const handleOnline = async () => {
- setIsOnline(true);
- setIsSyncing(true);
- await loadData();
- setIsSyncing(false);
- };
- const handleOffline = () => setIsOnline(false);
-
- window.addEventListener('online', handleOnline);
- window.addEventListener('offline', handleOffline);
-
- 
-  return () => {
- window.removeEventListener('online', handleOnline);
- window.removeEventListener('offline', handleOffline);
- };
- }, []);
-
- const handleForceSync = async () => {
- if (!isOnline) return;
- setIsSyncing(true);
- await loadData();
- setIsSyncing(false);
- };
-
- const checkConnection = async () => {
+ const checkConnection = useCallback(async () => {
  try {
- const { error } = await supabase.from('registros').select('id').limit(1);
+ const { error } = await supabase.from('visitas').select('id').limit(1);
  if (error) {
  if ((error?.message?.includes('fetch') || error?.message?.includes('Failed') || error?.code === '0' || String(error).includes('fetch') || String(error).includes('Failed'))) {
- setDbError(null); // Ignore in offline mode
+ setDbError(null); // Ignore in offline / network drop mode
  } else if (error?.message?.includes('relation "public.profiles" does not exist')) {
- setDbError(`Erro no Supabase: A tabela 'registros' possui uma regra (Policy/RLS) que tenta acessar a tabela 'profiles', que foi deletada. Desative o RLS ou remova a regra no painel do Supabase.`);
+ setDbError(`Erro de permissão no Supabase. Verifique se o RLS está configurado corretamente.`);
  } else if (error?.message?.includes('coluna') || error?.message?.includes('column')) {
- setDbError(`Erro no Supabase (coluna não encontrada ou cache).\n\nVá ao SQL Editor do Supabase e execute:\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Tipo Lote" text DEFAULT 'Misto';\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Peso aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Pontuação Sanitária" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Cresc 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Cresc 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Cresc 3" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Term 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Term 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Cresc 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Cresc 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Cresc 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Cresc 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Cresc 3" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Cresc 3" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Term 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Term 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Term 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Term 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Acum." numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Tratamentos" text;\nNOTIFY pgrst, 'reload schema';`);
+ setDbError(`Erro no banco de dados (coluna não encontrada). Erro original: ${error.message}`);
  } else {
- setDbError(`Erro ao conectar com a tabela 'registros': ${error.message}`);
+ setDbError(`Erro ao conectar com o banco de dados: ${error.message}`);
  }
  } else {
  setDbError(null);
@@ -138,21 +163,117 @@ export default function App() {
  setDbError(`Falha inesperada ao conectar: ${err.message}`);
  }
  }
+ }, []);
+
+ // Non-blocking background sync using exponential backoff
+ const syncInBackground = useCallback(async (isManual = false) => {
+ if (isSyncInProgressRef.current) return;
+ if (typeof navigator !== 'undefined' && !navigator.onLine) {
+   setIsOnline(false);
+   setIsSyncing(false);
+   return;
+ }
+
+ if (retryTimeoutRef.current) {
+   clearTimeout(retryTimeoutRef.current);
+   retryTimeoutRef.current = null;
+ }
+
+ isSyncInProgressRef.current = true;
+ setIsSyncing(true);
+ setSyncRetryStatus(null);
+
+ try {
+   await executeWithExponentialBackoff(
+     async () => {
+       await checkConnection();
+       await storage.syncFromSupabase();
+     },
+     {
+       maxRetries: isManual ? 2 : 3,
+       initialDelayMs: 1500,
+       maxDelayMs: 15000,
+       onRetry: (attempt, delayMs) => {
+         setSyncRetryStatus(`Tentativa ${attempt}...`);
+       }
+     }
+   );
+
+   // Update in-memory state with freshly synchronized local store
+   const dataIntegrados = await storage.getIntegrados();
+   const dataVisits = await storage.getVisits();
+   setIntegrados(Array.isArray(dataIntegrados) ? dataIntegrados : []);
+   setVisits(Array.isArray(dataVisits) ? dataVisits : []);
+   setPendingSyncIds(storage.getPendingSyncIds());
+   setSyncRetryStatus(null);
+ } catch (err: any) {
+   console.warn('Sync attempt completed with warnings (persisting offline):', err);
+   if (isManual) {
+     if (!(err?.message?.includes('fetch') || err?.message?.includes('Failed') || String(err).includes('fetch') || String(err).includes('Failed'))) {
+       alert("Erro ao sincronizar: " + (err.message || String(err)));
+     }
+   }
+ } finally {
+   isSyncInProgressRef.current = false;
+   setIsSyncing(false);
+   setSyncRetryStatus(null);
+ }
+ }, [checkConnection]);
+
+ // Fast, offline-first local data load (never blocks UI on network)
+ const loadData = useCallback(async () => {
+ storage.migrateIds();
+
+ try {
+   // Immediately populate UI from fast local cache
+   const dataIntegrados = await storage.getIntegrados();
+   const dataVisits = await storage.getVisits();
+   setIntegrados(Array.isArray(dataIntegrados) ? dataIntegrados : []);
+   setVisits(Array.isArray(dataVisits) ? dataVisits : []);
+   setPendingSyncIds(storage.getPendingSyncIds());
+ } catch (e) {
+   console.warn('Local storage load warning:', e);
+ } finally {
+   // Unlock UI immediately so the user can interact instantly
+   setLoading(false);
+ }
+
+ // Trigger non-blocking background sync with exponential backoff if online
+ if (typeof navigator !== 'undefined' && navigator.onLine) {
+   syncInBackground(false);
+ }
+ }, [syncInBackground]);
+
+ useEffect(() => {
+ const handleOnline = () => {
+ setIsOnline(true);
+ syncInBackground(false);
+ };
+ const handleOffline = () => {
+ setIsOnline(false);
+ setIsSyncing(false);
+ if (retryTimeoutRef.current) {
+   clearTimeout(retryTimeoutRef.current);
+   retryTimeoutRef.current = null;
+ }
  };
 
- const loadData = async () => {
- setLoading(true);
- await checkConnection();
- try {
- const dataIntegrados = await storage.getIntegrados();
- const dataVisits = await storage.getVisits();
- setIntegrados(Array.isArray(dataIntegrados) ? dataIntegrados : []);
- setVisits(Array.isArray(dataVisits) ? dataVisits : []);
- } catch (e) {
- console.warn('loadData failed', e);
- } finally {
- setLoading(false);
+ window.addEventListener('online', handleOnline);
+ window.addEventListener('sync-completed', () => setPendingSyncIds(storage.getPendingSyncIds()));
+ window.addEventListener('offline', handleOffline);
+
+ return () => {
+ window.removeEventListener('online', handleOnline);
+ window.removeEventListener('offline', handleOffline);
+ if (retryTimeoutRef.current) {
+   clearTimeout(retryTimeoutRef.current);
  }
+ };
+ }, [syncInBackground]);
+
+ const handleForceSync = async () => {
+ if (!isOnline) return;
+ await syncInBackground(true);
  };
 
  useEffect(() => {
@@ -241,15 +362,19 @@ export default function App() {
  if (!integradoNome || !alojamentoDate) return;
  const existing = integrados.find(i => i.id === newVisit.integradoId);
  if (!existing) {
- const newIntegrado: Integrado = {
- id: newVisit.integradoId,
- name: integradoNome,
- alojamentoDate,
- status: 'Em andamento'
- };
- const updatedIntegrados = [...integrados, newIntegrado];
- setIntegrados(updatedIntegrados);
- await storage.saveIntegrados(updatedIntegrados);
+   const newIntegrado: Integrado = {
+     id: newVisit.integradoId,
+     name: integradoNome,
+     alojamentoDate,
+     status: 'Em andamento'
+   };
+   const updatedIntegrados = [...integrados, newIntegrado];
+   setIntegrados(updatedIntegrados);
+   await storage.saveIntegrados(updatedIntegrados);
+ } else if (existing.name !== integradoNome || existing.alojamentoDate !== alojamentoDate) {
+   const updatedIntegrados = integrados.map(i => i.id === existing.id ? { ...i, name: integradoNome, alojamentoDate } : i);
+   setIntegrados(updatedIntegrados);
+   await storage.saveIntegrados(updatedIntegrados);
  }
  };
 
@@ -261,11 +386,12 @@ export default function App() {
  setVisits(updatedVisits);
  const savedVisits = await storage.saveVisits(updatedVisits, [newVisit]);
  setVisits([...savedVisits]);
+    setPendingSyncIds(storage.getPendingSyncIds());
  
  // Create local backup to IndexedDB
  await saveBackupToIndexedDB();
  } catch (error: any) {
- alert(`Erro ao salvar lançamento:\n\n${error.message}\n\nPara corrigir este erro (incluindo erro de cache), vá ao painel do Supabase, acesse o SQL Editor e execute tudo isto:\n\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Tipo Lote" text DEFAULT 'Misto';\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Peso aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Pontuação Sanitária" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Cresc 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Cresc 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Cresc 3" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Term 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Term 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Cresc 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Cresc 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Cresc 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Cresc 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Cresc 3" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Cresc 3" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Term 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Term 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Term 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Term 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Acum." numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Tratamentos" text;\nNOTIFY pgrst, 'reload schema';`);
+ alert(`Erro ao salvar lançamento:\n\n${error.message}`);
  // Revert the optimistic update if needed, but for now we just show the error.
  }
  };
@@ -279,11 +405,12 @@ export default function App() {
  setVisits(updatedVisits);
  const savedVisits = await storage.saveVisits(updatedVisits, [updatedVisit]);
  setVisits([...savedVisits]);
+    setPendingSyncIds(storage.getPendingSyncIds());
  
  // Create local backup to IndexedDB
  await saveBackupToIndexedDB();
  } catch (error: any) {
- alert(`Erro ao atualizar lançamento:\n\n${error.message}\n\nPara corrigir este erro (incluindo erro de cache), vá ao painel do Supabase, acesse o SQL Editor e execute tudo isto:\n\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Tipo Lote" text DEFAULT 'Misto';\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Peso aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Pontuação Sanitária" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Cresc 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Cresc 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Cresc 3" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Term 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Carga Term 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Aloj" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Cresc 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Cresc 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Cresc 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Cresc 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Cresc 3" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Cresc 3" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Term 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Term 1" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Term 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Cons. Term 2" numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Meta Acum." numeric;\nALTER TABLE registros ADD COLUMN IF NOT EXISTS "Tratamentos" text;\nNOTIFY pgrst, 'reload schema';`);
+ alert(`Erro ao atualizar lançamento:\n\n${error.message}`);
  }
  };
 
@@ -293,6 +420,8 @@ export default function App() {
  const updatedVisits = visits.filter(v => v.id !== id);
  setVisits(updatedVisits);
  await storage.deleteVisit(id);
+ setPendingSyncIds(storage.getPendingSyncIds());
+ await saveBackupToIndexedDB();
  
  if (visitToDelete) {
  const remainingVisits = updatedVisits.filter(v => v.integradoId === visitToDelete.integradoId);
@@ -301,7 +430,7 @@ export default function App() {
  }
  }
  } catch (error: any) {
- alert(`Erro ao deletar lançamento:\n\n${error.message}\n\nSe for um erro de RLS, acesse o SQL Editor do Supabase e execute:\nALTER TABLE registros DISABLE ROW LEVEL SECURITY;`);
+ alert(`Erro ao deletar lançamento:\n\n${error?.message || error}`);
  }
  };
 
@@ -317,18 +446,42 @@ export default function App() {
  }
  };
 
- const handleUpdateIntegrado = async (integrado: Integrado) => {
+  const handleUpdateIntegrado = async (integrado: Integrado) => {
  try {
- if (isOnline) {
- const { error } = await supabase
- .from('integrados')
- .update(integrado)
- .eq('id', integrado.id);
- if (error) throw error;
- } else {
- await storage.saveIntegrados([integrado, ...integrados.filter(i => i.id !== integrado.id)]);
- }
- setIntegrados(prev => prev.map(i => i.id === integrado.id ? integrado : i));
+   let syncFailed = false;
+   if (isOnline) {
+     const { error } = await supabase
+       .from('lotes')
+       .update({
+         data_alojamento: integrado.alojamentoDate,
+         status: integrado.status === 'Em andamento' ? 'Ativo' : 'Encerrado',
+         
+       })
+       .eq('id', integrado.id);
+     
+     if (error) {
+       console.error('Erro ao atualizar lote no Supabase:', error);
+       syncFailed = true;
+     }
+   } else {
+     syncFailed = true;
+   }
+
+   if (syncFailed) {
+     const OFFLINE_EDIT_INTEGRADO_QUEUE = 'suino_dashpro_offline_edit_integrado';
+     let q = [];
+     try {
+       q = JSON.parse(localStorage.getItem(OFFLINE_EDIT_INTEGRADO_QUEUE) || '[]');
+     } catch (e) {}
+     const newQ = q.filter((i: Integrado) => i.id !== integrado.id);
+     newQ.push(integrado);
+     localStorage.setItem(OFFLINE_EDIT_INTEGRADO_QUEUE, JSON.stringify(newQ));
+   }
+
+ const updatedList = integrados.map(i => i.id === integrado.id ? integrado : i);
+ setIntegrados(updatedList);
+ await storage.saveIntegrados(updatedList);
+ await saveBackupToIndexedDB();
  } catch (err: any) {
  console.error('Erro ao atualizar lote:', err);
  }
@@ -336,15 +489,14 @@ export default function App() {
 
  const handleDeleteIntegrado = async (id: string) => {
  try {
- if (isOnline) {
- await supabase.from('integrados').delete().eq('id', id);
- } else {
  await storage.deleteIntegrado(id);
- }
  setIntegrados(prev => prev.filter(i => i.id !== id));
  setVisits(prev => prev.filter(v => v.integradoId !== id));
+ setPendingSyncIds(storage.getPendingSyncIds());
+ await saveBackupToIndexedDB();
  } catch (err: any) {
  console.error('Erro ao deletar lote:', err);
+ alert(`Erro ao deletar lote:\n\n${err?.message || err}`);
  }
  };
 
@@ -509,7 +661,8 @@ export default function App() {
  />
  )}
  
- {currentTab === 'curva' && <ReferenceCurve />}
+ {currentTab === 'medicamentos' && <MedicationAnalysis visits={visits} integrados={integrados} />}
+          {currentTab === 'curva' && <ReferenceCurve />}
  {currentTab === 'importar' && <ImportData onImportComplete={() => { loadData(); setCurrentTab('dashboard'); }} />}
 
  {viewingIntegradoId && (
@@ -617,11 +770,15 @@ export default function App() {
  <button 
  onClick={handleForceSync}
  disabled={isSyncing}
- className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-full hover:bg-emerald-100 transition-colors border border-emerald-200"
- title="Sincronizar dados agora"
+ className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-full transition-colors border ${
+   syncRetryStatus 
+     ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100' 
+     : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200'
+ }`}
+ title={syncRetryStatus ? `Sincronizando: ${syncRetryStatus}` : "Sincronizar dados agora"}
  >
  <Wifi className="w-3.5 h-3.5" />
- <span className="hidden sm:inline">Online</span>
+ <span className="hidden sm:inline">{syncRetryStatus || (isSyncing ? 'Sincronizando...' : 'Online')}</span>
  {isSyncing && <RefreshCw className="w-3 h-3 animate-spin ml-1" />}
  </button>
  ) : (

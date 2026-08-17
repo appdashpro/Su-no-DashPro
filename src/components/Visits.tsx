@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Visit, Integrado } from '../types';
-import { getExpectedConsumption } from '../data';
+import { Visit, Integrado, isVisitForIntegrado } from '../types';
+import { getExpectedConsumption, getActiveCurve } from '../data';
 import { Search, ArrowUpDown, Download, Plus, Eye, X, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 interface VisitsListProps {
+ pendingSyncIds?: string[];
  visits: Visit[];
  integrados: Integrado[];
  onEditVisit: (id: string) => void;
@@ -18,7 +19,7 @@ interface VisitsListProps {
 
 type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'idade-desc' | 'idade-asc';
 
-export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onNewVisit, onNewLote, onExport, viewingIntegradoId, onSetViewingIntegradoId }: VisitsListProps) {
+export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onNewVisit, onNewLote, onExport, viewingIntegradoId, onSetViewingIntegradoId, pendingSyncIds }: VisitsListProps) {
  const [searchTerm, setSearchTerm] = useState('');
  const [sortBy, setSortBy] = useState<SortOption>('date-desc');
  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -30,8 +31,8 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  setInternalSelected(id);
  };
 
- const getIntegradoName = (integradoId: string) => {
- return integrados.find(i => i.id === integradoId)?.name || '';
+ const getIntegradoForVisit = (v: Visit) => {
+   return integrados.find(i => isVisitForIntegrado(v, i));
  };
 
  const sortedVisits = [...visits].sort((a, b) => {
@@ -41,9 +42,9 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  case 'date-asc':
  return new Date(a.date).getTime() - new Date(b.date).getTime();
  case 'name-asc':
- return getIntegradoName(a.integradoId).localeCompare(getIntegradoName(b.integradoId));
+ return (getIntegradoForVisit(a)?.name || '').localeCompare(getIntegradoForVisit(b)?.name || '');
  case 'name-desc':
- return getIntegradoName(b.integradoId).localeCompare(getIntegradoName(a.integradoId));
+ return (getIntegradoForVisit(b)?.name || '').localeCompare(getIntegradoForVisit(a)?.name || '');
  case 'idade-desc':
  return b.idade - a.idade;
  case 'idade-asc':
@@ -54,7 +55,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  });
 
  const filteredVisits = sortedVisits.filter(v => {
- const integrado = integrados.find(i => i.id === v.integradoId);
+ const integrado = getIntegradoForVisit(v);
  return (integrado?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
  v.recomendacao.toLowerCase().includes(searchTerm.toLowerCase());
  });
@@ -123,8 +124,10 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Idade</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Animais Alojados</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Animais Mortos</th>
+ <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Descartes</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Mortalidade (%)</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Vol. Cargas (kg)</th>
+ <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Sobra Silo (kg)</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Recomendação</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Consumo acumulado</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Comedouro</th>
@@ -149,6 +152,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Carga Term 2</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Meta Acum.</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Peso aloj</th>
+ <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Peso Amostrado (kg)</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Pontuação Sanitária</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Tratamentos</th>
  <th className="px-2 py-2 border-b border-slate-200 w-[60px] sticky right-0 top-0 bg-slate-50 z-30 text-center">Ações</th>
@@ -158,11 +162,43 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <AnimatePresence>
  {filteredVisits.length === 0 ? (
  <tr>
- <td colSpan={36} className="px-5 py-8 text-center text-slate-500">Nenhuma visita encontrada.</td>
+ <td colSpan={39} className="px-5 py-8 text-center text-slate-500">Nenhuma visita encontrada.</td>
  </tr>
  ) : filteredVisits.map((v) => {
- const integrado = integrados.find(i => i.id === v.integradoId);
+ const integrado = getIntegradoForVisit(v);
  const expected = getExpectedConsumption(v.idade, v.tipoLote, v.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate);
+ const activeCurveInfo = getActiveCurve(integrado?.alojamentoDate, integrado?.status, v.tipoLote, integrado?.fechamentoDate);
+ const metas = activeCurveInfo.metas;
+
+ const alojados = Number(v.animaisAlojados) || 0;
+ const mortos = Number(v.animaisMortos) || 0;
+ const descartes = Number(v.descartesPeriodo) || 0;
+ const vivos = alojados - mortos - descartes;
+
+ const getConsumo = (consumo?: number, carga?: number) => {
+   if (consumo !== undefined && consumo !== null && !isNaN(Number(consumo)) && String(consumo).trim() !== '') {
+     return Number(consumo).toFixed(2);
+   }
+   if (carga !== undefined && carga !== null && Number(carga) > 0 && vivos > 0) {
+     return (Number(carga) / vivos).toFixed(2);
+   }
+   return '-';
+ };
+
+ const volumeTotal = (v.volumeTotalCargas !== undefined && v.volumeTotalCargas !== null && String(v.volumeTotalCargas).trim() !== '')
+   ? Number(v.volumeTotalCargas)
+   : ((Number(v.cargaAlojamento) || 0) + (Number(v.cargaCrescimento1) || 0) + (Number(v.cargaCrescimento2) || 0) + (Number(v.cargaCrescimento3) || 0) + (Number(v.cargaTerminacao1) || 0) + (Number(v.cargaTerminacao2) || 0));
+
+ const consumoAcumuladoRealCalc = (() => {
+   if (v.consumoAcumuladoReal !== undefined && v.consumoAcumuladoReal !== null && !isNaN(Number(v.consumoAcumuladoReal)) && Number(v.consumoAcumuladoReal) > 0) {
+     return Number(v.consumoAcumuladoReal).toFixed(2);
+   }
+   if (volumeTotal > 0 && vivos > 0) {
+     const kgConsumidos = volumeTotal - (Number(v.sobraSiloKg) || 0);
+     return (kgConsumidos / vivos).toFixed(2);
+   }
+   return '-';
+ })();
 
  return (
  <motion.tr 
@@ -176,18 +212,20 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <td className="px-2 py-2 whitespace-nowrap">{
  new Date(Number(v.date.split('-')[0]), Number(v.date.split('-')[1]) - 1, Number(v.date.split('-')[2])).toLocaleDateString('pt-BR')
  }</td>
- <td className="px-2 py-2 font-medium text-slate-800">{integrado?.name || 'Desconhecido'}</td>
+ <td className={`px-2 py-2 font-medium ${pendingSyncIds?.includes(v.id) ? 'text-red-600 font-bold' : 'text-slate-800'}`} title={pendingSyncIds?.includes(v.id) ? "Aguardando sincronização com a nuvem" : ""}>{integrado?.name || 'Desconhecido'}</td>
  <td className="px-2 py-2 whitespace-nowrap text-slate-600">{integrado?.alojamentoDate ? new Date(Number(integrado.alojamentoDate.split('-')[0]), Number(integrado.alojamentoDate.split('-')[1]) - 1, Number(integrado.alojamentoDate.split('-')[2])).toLocaleDateString('pt-BR') : '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap"><span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">{v.tipoLote || 'Misto'}</span></td>
  <td className="px-2 py-2 whitespace-nowrap">{v.idade}</td>
  <td className="px-2 py-2 whitespace-nowrap">{v.animaisAlojados ?? '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap">{v.animaisMortos ?? '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap">{v.descartesPeriodo ?? '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap">
  {v.mortalidade !== undefined && v.mortalidade !== null 
- ? <span className="text-xs font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{v.mortalidade}%</span> 
+ ? <span className="text-xs font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{Number(v.mortalidade || 0).toFixed(2)}%</span> 
  : v.animaisAlojados && v.animaisMortos ? <span className="text-xs font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{((Number(v.animaisMortos)/Number(v.animaisAlojados))*100).toFixed(2)}%</span> : '-'}
  </td>
  <td className="px-2 py-2 whitespace-nowrap">{v.volumeTotalCargas ?? '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap">{v.sobraSiloKg ?? '-'}</td>
  <td className="px-2 py-2">
  <div className="text-xs leading-relaxed min-w-[300px] whitespace-pre-wrap" title={v.recomendacao}>
  {v.recomendacao ? (
@@ -199,32 +237,33 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  ) : '-'}
  </div>
  </td>
- <td className="px-2 py-2 whitespace-nowrap font-semibold">{v.consumoAcumuladoReal ?? '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap font-semibold">{consumoAcumuladoRealCalc}</td>
  <td className="px-2 py-2 whitespace-nowrap text-xs">{v.comedouro || '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap text-xs">{v.colaborador ? v.colaborador.replace(/\s*,\s*/g, ' / ') : '-'}</td>
  
  {/* Metas e Consumos */}
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.metaAlojamento ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.consumoAlojamento ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaAlojamento ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.metaCrescimento1 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.consumoCrescimento1 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaCrescimento1 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.metaCrescimento2 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.consumoCrescimento2 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaCrescimento2 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.metaCrescimento3 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.consumoCrescimento3 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaCrescimento3 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.metaTerminacao1 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.consumoTerminacao1 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaTerminacao1 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.metaTerminacao2 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.consumoTerminacao2 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaTerminacao2 ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs font-semibold">{v.metaAcumulada ?? '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{(v.metaAlojamento || metas.metaAlojamento) ? Number(v.metaAlojamento || metas.metaAlojamento).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{getConsumo(v.consumoAlojamento, v.cargaAlojamento)}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaAlojamento ? Number(v.cargaAlojamento).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{(v.metaCrescimento1 || metas.metaCrescimento1) ? Number(v.metaCrescimento1 || metas.metaCrescimento1).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{getConsumo(v.consumoCrescimento1, v.cargaCrescimento1)}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaCrescimento1 ? Number(v.cargaCrescimento1).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{(v.metaCrescimento2 || metas.metaCrescimento2) ? Number(v.metaCrescimento2 || metas.metaCrescimento2).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{getConsumo(v.consumoCrescimento2, v.cargaCrescimento2)}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaCrescimento2 ? Number(v.cargaCrescimento2).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{(v.metaCrescimento3 || metas.metaCrescimento3) ? Number(v.metaCrescimento3 || metas.metaCrescimento3).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{getConsumo(v.consumoCrescimento3, v.cargaCrescimento3)}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaCrescimento3 ? Number(v.cargaCrescimento3).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{(v.metaTerminacao1 || metas.metaTerminacao1) ? Number(v.metaTerminacao1 || metas.metaTerminacao1).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{getConsumo(v.consumoTerminacao1, v.cargaTerminacao1)}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaTerminacao1 ? Number(v.cargaTerminacao1).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{(v.metaTerminacao2 || metas.metaTerminacao2) ? Number(v.metaTerminacao2 || metas.metaTerminacao2).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{getConsumo(v.consumoTerminacao2, v.cargaTerminacao2)}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{v.cargaTerminacao2 ? Number(v.cargaTerminacao2).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs font-semibold">{(v.metaAcumulada || metas.metaAcumulada) ? Number(v.metaAcumulada || metas.metaAcumulada).toFixed(2) : '-'}</td>
  
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.pesoAloj ?? '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{v.pesoAloj ? Number(v.pesoAloj).toFixed(2) : '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap text-xs">{v.pesoAmostradoKg ? Number(v.pesoAmostradoKg).toFixed(2) : '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap text-xs">{v.pontuacaoSanitaria ?? '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap text-xs">{v.tratamentos && v.tratamentos.length > 0 ? v.tratamentos.map(t => t.produto).join(', ') : '-'}</td>
  

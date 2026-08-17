@@ -387,7 +387,7 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
                 </div>
                 <h3 className="text-lg font-bold text-slate-900 text-center mb-2">Excluir lote?</h3>
                 <p className="text-sm text-slate-500 text-center mb-6">
-                  Tem certeza que deseja apagar este lote? Esta ação removerá o lote permanentemente e não poderá ser desfeita.
+                  Tem certeza que deseja apagar este lote? Esta ação removerá o lote permanentemente e <strong>todos os seus registros de visitas também serão perdidos</strong>. Esta ação não poderá ser desfeita.
                 </p>
                 <div className="flex gap-3">
                   <button 

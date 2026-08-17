@@ -87,7 +87,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                                     <td className="px-4 py-2 text-slate-600">{meta ?? '-'}</td>
                                     <td className={`px-4 py-2 font-medium ${diff !== null && Math.abs(diff) <= 5 ? 'text-blue-600' : diff !== null && diff > 5 ? 'text-red-600' : diff !== null && diff < -5 ? 'text-emerald-600' : 'text-slate-600'}`}>{cons ?? '-'}</td>
                                     <td className={`px-4 py-2 font-medium ${diff !== null && Math.abs(diff) <= 5 ? 'text-blue-600' : diff !== null && diff > 5 ? 'text-red-600' : diff !== null && diff < -5 ? 'text-emerald-600' : 'text-slate-600'}`}>
-                                      {diff !== null ? (diff > 0 ? `+${diff}` : diff) : '-'}
+                                      {diff !== null ? (diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2)) : '-'}
                                     </td>
                                   </tr>
                                 );
@@ -135,10 +135,10 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                               <div>
                                 <span className="text-slate-500 mr-1">Consumo Real:</span>
                                 <span className={`font-semibold ${diffAcumulado !== null && Math.abs(diffAcumulado) <= 5 ? 'text-blue-600' : diffAcumulado !== null && diffAcumulado > 5 ? 'text-red-600' : diffAcumulado !== null && diffAcumulado < -5 ? 'text-emerald-600' : 'text-slate-700'}`}>
-                                  {consumoReal ?? '-'} kg
+                                  {consumoReal !== null && consumoReal !== undefined ? consumoReal.toFixed(2) : '-'} kg
                                   {diffAcumulado !== null && (
                                     <span className="text-xs ml-1 opacity-80">
-                                      ({diffAcumulado > 0 ? `+${diffAcumulado}` : diffAcumulado})
+                                      ({diffAcumulado > 0 ? `+${diffAcumulado.toFixed(2)}` : diffAcumulado.toFixed(2)})
                                     </span>
                                   )}
                                 </span>
@@ -164,7 +164,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                               </span>
                             ) : visit.mortalidade ? (
                               <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-                                {visit.mortalidade}%
+                                {Number(visit.mortalidade || 0).toFixed(2)}%
                               </span>
                             ) : null}
                           </span>
