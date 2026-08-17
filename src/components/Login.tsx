@@ -45,7 +45,7 @@ export function Login() {
           }
           throw new Error(error.message || JSON.stringify(error));
         }
-        setMessage('Conta criada com sucesso! Verifique seu email ou faça login.');
+        setMessage('Conta criada com sucesso! Verifique seu email ou faça o login.');
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -80,7 +80,7 @@ export function Login() {
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Acesse sua conta
+          {isSignUp ? 'Criar nova conta' : 'Acesse sua conta'}
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Suíno DashPro - Gestão Agropecuária
@@ -155,11 +155,36 @@ export function Login() {
                 {loading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  'Entrar'
+                  isSignUp ? 'Cadastrar' : 'Entrar'
                 )}
               </button>
             </div>
           </form>
+
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">
+                  Ou
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-blue-600 hover:text-blue-500 font-medium text-sm transition-colors"
+                type="button"
+              >
+                {isSignUp
+                  ? 'Já tem uma conta? Faça login'
+                  : 'Ainda não tem conta? Cadastre-se'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

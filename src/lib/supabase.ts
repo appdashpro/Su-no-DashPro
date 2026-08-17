@@ -7,8 +7,9 @@ const customFetch = async (...args: any[]) => {
   try {
     return await fetch(...(args as [RequestInfo, RequestInit?]));
   } catch (error: any) {
+    console.error('customFetch failed for:', args[0], error);
     // Treat any error during fetch as an offline/network error to avoid throwing objects that crash the app
-    return new Response(JSON.stringify({ error: 'offline', message: 'Failed to fetch' }), {
+    return new Response(JSON.stringify({ error: 'offline', message: 'Failed to fetch', details: error.toString() }), {
       status: 502,
       statusText: 'Bad Gateway',
       headers: { 'Content-Type': 'application/json' }
