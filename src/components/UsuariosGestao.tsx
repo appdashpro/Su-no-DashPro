@@ -370,14 +370,14 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
                       <td className="px-5 py-4">
                         {isMaster ? (
                           <span className="text-purple-700 font-medium bg-purple-50 px-2 py-0.5 rounded text-[11px]">
-                            Todos os produtores (Visão Geral)
+                            Todos os clientes (Visão Geral)
                           </span>
                         ) : isNutron ? (
                           user.clientes_permitidos && user.clientes_permitidos.length > 0 ? (
                             <div className="flex flex-wrap gap-1 max-w-md">
                               {user.clientes_permitidos.map((intId, idx) => {
-                                const intObj = uniqueIntegrados.find(i => i.id === intId || i.name === intId);
-                                const displayName = intObj ? intObj.name : intId;
+                                const empObj = empresas.find(e => e.id === intId);
+                                const displayName = empObj ? empObj.nome : "Cliente Desconhecido";
                                 return (
                                   <span key={idx} className="inline-block bg-blue-50 text-blue-700 border border-blue-100 rounded px-1.5 py-0.5 text-[10px]">
                                     {displayName}
@@ -508,33 +508,33 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
                     <button
                       type="button"
                       onClick={() => {
-                        if (formData.selectedIntegrados.length === uniqueIntegrados.length) {
+                        if (formData.selectedIntegrados.length === empresas.length) {
                           setFormData({ ...formData, selectedIntegrados: [] });
                         } else {
-                          setFormData({ ...formData, selectedIntegrados: uniqueIntegrados.map(i => i.id) });
+                          setFormData({ ...formData, selectedIntegrados: empresas.map(e => e.id) });
                         }
                       }}
                       className="text-[11px] text-blue-600 hover:underline"
                     >
-                      {formData.selectedIntegrados.length === uniqueIntegrados.length ? 'Desmarcar Todos' : 'Marcar Todos'}
+                      {formData.selectedIntegrados.length === empresas.length ? 'Desmarcar Todos' : 'Marcar Todos'}
                     </button>
                   </div>
                   <p className="text-[11px] text-slate-500 mb-2.5">
-                    Selecione quais granjas e integrados este consultor Nutron pode visualizar e lançar visitas:
+                    Selecione quais clientes (empresas) este consultor Nutron pode visualizar e lançar visitas:
                   </p>
                   
                   <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-xl p-2.5 space-y-1.5 bg-slate-50">
-                    {uniqueIntegrados.map((i) => {
-                      const isChecked = formData.selectedIntegrados.includes(i.id) || formData.selectedIntegrados.includes(i.name);
+                    {empresas.map((e) => {
+                      const isChecked = formData.selectedIntegrados.includes(e.id);
                       return (
-                        <label key={i.id} className="flex items-center gap-2.5 text-xs text-slate-800 hover:bg-white p-1.5 rounded-lg cursor-pointer transition-colors">
+                        <label key={e.id} className="flex items-center gap-2.5 text-xs text-slate-800 hover:bg-white p-1.5 rounded-lg cursor-pointer transition-colors">
                           <input
                             type="checkbox"
                             checked={isChecked}
-                            onChange={() => toggleIntegradoSelection(i.id)}
+                            onChange={() => toggleIntegradoSelection(e.id)}
                             className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
                           />
-                          <span className="font-medium">{i.name}</span>
+                          <span className="font-medium">{e.nome}</span>
                         </label>
                       );
                     })}
