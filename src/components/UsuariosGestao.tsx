@@ -14,7 +14,14 @@ import {
   AlertCircle, 
   CheckCircle2, 
   Code2, 
-  RefreshCw 
+  RefreshCw,
+  Eye,
+  EyeOff,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Lock,
+  ExternalLink
 } from 'lucide-react';
 import { UserProfile, PapelUsuario, Integrado, getRoleLabel, Empresa } from '../types';
 import { supabase } from '../lib/supabase';
@@ -38,13 +45,17 @@ export function UsuariosGestao({ integrados, currentUser }: UsuariosGestaoProps)
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
+    senha: '',
+    mostrarSenha: false,
     papel: 'TECNICO_NUTRON' as PapelUsuario,
     selectedIntegrados: [] as string[],
     empresa_id: ''
   });
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [authWarning, setAuthWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   // SQL Script Viewer Modal
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
@@ -86,6 +97,8 @@ export function UsuariosGestao({ integrados, currentUser }: UsuariosGestaoProps)
     setFormData({
       nome: '',
       email: '',
+      senha: '',
+      mostrarSenha: false,
       papel: 'TECNICO_NUTRON',
       selectedIntegrados: [] as string[],
       empresa_id: ''
@@ -99,6 +112,8 @@ export function UsuariosGestao({ integrados, currentUser }: UsuariosGestaoProps)
     setFormData({
       nome: user.nome,
       email: user.email,
+      senha: '',
+      mostrarSenha: false,
       papel: user.papel,
       selectedIntegrados: user.clientes_permitidos || [],
       empresa_id: user.empresa_id || ''
@@ -114,8 +129,14 @@ export function UsuariosGestao({ integrados, currentUser }: UsuariosGestaoProps)
       return;
     }
 
+    if (!editingUser && formData.senha && formData.senha.length < 6) {
+      setError('A senha deve ter no mínimo 6 caracteres.');
+      return;
+    }
+
     setSaving(true);
     setError(null);
+    setAuthWarning(null);
     try {
       const userToSave: UserProfile = {
         id: editingUser?.id || 'usr_' + Math.random().toString(36).substring(2, 9),
@@ -127,10 +148,27 @@ export function UsuariosGestao({ integrados, currentUser }: UsuariosGestaoProps)
         clientes_permitidos: formData.papel === 'TECNICO_NUTRON' ? formData.selectedIntegrados : []
       };
 
-      const success = await saveUserWithPermissions(userToSave, userToSave.clientes_permitidos || []);
-      if (success) {
-        setSaveSuccess('Usuário e vínculos salvos com sucesso!');
-        setTimeout(() => setSaveSuccess(null), 3000);
+      const result = await saveUserWithPermissions(
+        userToSave,
+        userToSave.clientes_permitidos || [],
+        formData.senha
+      );
+
+      if (result.success) {
+        if (result.authCreated) {
+          setSaveSuccess(`Usuário e Login criados com sucesso no Supabase! Senha definida.`);
+        } else if (result.authError === 'signup_disabled') {
+          setSaveSuccess('Usuário salvo nas permissões com sucesso!');
+          setAuthWarning(
+            `Atenção: O Supabase está com "Signups not allowed" bloqueado para auto-registro. Para vincular a senha definida para ${userToSave.email}, acesse o Supabase Dashboard > Authentication > Users > "Add user" ou ative "Allow new users to sign up" em Authentication > Providers > Email.`
+          );
+        } else if (result.authError === 'already_exists') {
+          setSaveSuccess('Usuário e permissões atualizados! A conta de login já existia no Supabase.');
+        } else {
+          setSaveSuccess('Usuário e vínculos salvos com sucesso!');
+        }
+
+        setTimeout(() => setSaveSuccess(null), 5000);
         setIsModalOpen(false);
         await loadUsers();
       } else {
@@ -260,6 +298,78 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
             <span>{saveSuccess}</span>
           </div>
         )}
+
+        {authWarning && (
+          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">{authWarning}</p>
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  onClick={() => setShowGuide(true)}
+                  className="inline-flex items-center gap-1 font-bold underline hover:text-amber-950"
+                >
+                  <Key className="w-3.5 h-3.5" /> Ver passo a passo no Supabase
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Guia Rápido de Senhas / Supabase Auth */}
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          <button
+            onClick={() => setShowGuide(!showGuide)}
+            className="flex items-center justify-between w-full text-left text-xs font-semibold text-slate-700 hover:text-blue-600 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Key className="w-4 h-4 text-blue-600" />
+              <span>Como gerenciar Senhas e Logins no Supabase (Guia Rápido)</span>
+            </div>
+            {showGuide ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+          </button>
+
+          {showGuide && (
+            <div className="mt-3 p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 space-y-3">
+              <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                <span>🔐 Existem duas formas simples de definir a senha do seu usuário:</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-2xs">
+                  <div className="font-bold text-blue-700 mb-1 flex items-center gap-1">
+                    <span>Opção 1: Criar direto no Supabase (Recomendado)</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-600">
+                    <li>Acesse o painel do <strong>Supabase</strong></li>
+                    <li>Vá em <strong>Authentication &gt; Users</strong></li>
+                    <li>Clique no botão verde <strong>"Add user" &gt; "Create user"</strong></li>
+                    <li>Digite o e-mail (ex: <code>wagner_galvan@cargill.com</code>) e a senha desejada</li>
+                    <li>Marque <strong>"Auto Confirm User"</strong> e clique em Salvar</li>
+                  </ol>
+                  <p className="mt-2 text-[10px] text-emerald-700 font-medium bg-emerald-50 p-1.5 rounded">
+                    ✓ O usuário herdará automaticamente todas as permissões e vínculos cadastrados aqui!
+                  </p>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-2xs">
+                  <div className="font-bold text-blue-700 mb-1 flex items-center gap-1">
+                    <span>Opção 2: Liberar cadastro direto pelo App</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-600">
+                    <li>No Supabase, vá em <strong>Authentication &gt; Providers &gt; Email</strong></li>
+                    <li>Marque a opção <strong>"Allow new users to sign up"</strong></li>
+                    <li>Desmarque <strong>"Confirm email"</strong> para liberar acesso instantâneo</li>
+                    <li>Clique em <strong>Save</strong></li>
+                  </ol>
+                  <p className="mt-2 text-[10px] text-blue-700 font-medium bg-blue-50 p-1.5 rounded">
+                    ✓ Com isso, sempre que você digitar uma senha no formulário abaixo, o app criará a conta no Supabase automaticamente!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Search & Filter Bar */}
@@ -481,6 +591,34 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
                   placeholder="Ex: joao.silva@empresa.com"
                   className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-blue-500"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    {editingUser ? 'Alterar Senha de Acesso (Opcional)' : 'Definir Senha de Acesso'}
+                  </label>
+                  <span className="text-[10px] text-slate-400">Mín. 6 caracteres</span>
+                </div>
+                <div className="relative">
+                  <input
+                    type={formData.mostrarSenha ? "text" : "password"}
+                    value={formData.senha}
+                    onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
+                    placeholder={editingUser ? "Deixe em branco para manter a senha atual" : "Digite a senha de login (ex: Nutron@2025)"}
+                    className="w-full pl-3 pr-9 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, mostrarSenha: !formData.mostrarSenha })}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    {formData.mostrarSenha ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  A senha será usada pelo técnico para fazer login no aplicativo.
+                </p>
               </div>
 
               <div>

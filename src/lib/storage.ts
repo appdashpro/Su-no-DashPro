@@ -286,14 +286,35 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
         }
       }
 
-      const { data: integradosDB, error: e1 } = await supabase.from('integrados').select('*');
-      if (e1) throw e1;
-      const { data: lotesDB, error: e2 } = await supabase.from('lotes').select('*');
-      if (e2) throw e2;
-      const { data: visitasDB, error: e3 } = await supabase.from('visitas').select('*, cargas_racao(*), tratamentos(*)');
-      if (e3) throw e3;
-      const { data: empresasDB, error: e4 } = await supabase.from('empresas').select('*');
-      if (e4) throw e4;
+      const { data: integradosDB } = await supabase.from('integrados').select('*').range(0, 9999);
+      const { data: lotesDB } = await supabase.from('lotes').select('*').range(0, 9999);
+      const { data: empresasDB } = await supabase.from('empresas').select('*').range(0, 9999);
+
+      let visitasDB: any[] = [];
+      let cargasDB: any[] = [];
+      let tratamentosDB: any[] = [];
+
+      try {
+        const { data: vData, error: vErr } = await supabase.from('visitas').select('*, cargas_racao(*), tratamentos(*)').range(0, 9999);
+        if (vErr || !vData) {
+          const { data: fallbackV } = await supabase.from('visitas').select('*').range(0, 9999);
+          visitasDB = fallbackV || [];
+          const { data: cData } = await supabase.from('cargas_racao').select('*').range(0, 9999);
+          cargasDB = cData || [];
+          const { data: tData } = await supabase.from('tratamentos').select('*').range(0, 9999);
+          tratamentosDB = tData || [];
+        } else {
+          visitasDB = vData;
+        }
+      } catch (err) {
+        console.warn('Fallback to separate table queries for visitas:', err);
+        const { data: fallbackV } = await supabase.from('visitas').select('*').range(0, 9999);
+        visitasDB = fallbackV || [];
+        const { data: cData } = await supabase.from('cargas_racao').select('*').range(0, 9999);
+        cargasDB = cData || [];
+        const { data: tData } = await supabase.from('tratamentos').select('*').range(0, 9999);
+        tratamentosDB = tData || [];
+      }
 
       const currentLocalIntegrados = getIntegradosLocal();
       const mappedIntegrados: Integrado[] = (lotesDB || []).map(lote => {
@@ -302,7 +323,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
         const empresa = empresasDB?.find(e => e.id === lote.empresa_id);
         return {
           id: lote.id, 
-          name: integrado?.nome || 'Desconhecido',
+          name: integrado?.nome || (lote as any).nome_produtor || 'Desconhecido',
           alojamentoDate: lote.data_alojamento,
           status: lote.status === 'Ativo' ? 'Em andamento' : 'Fechado',
           fechamentoDate: localVersion?.fechamentoDate || undefined,
@@ -311,13 +332,35 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
         };
       });
 
+      // Ensure any lote_id referenced in visitasDB has a corresponding Integrado item
+      visitasDB.forEach(v => {
+        if (v.lote_id && !mappedIntegrados.some(i => i.id === v.lote_id)) {
+          const matchedIntegrado = integradosDB?.find(i => i.id === v.integrado_id);
+          mappedIntegrados.push({
+            id: v.lote_id,
+            name: matchedIntegrado?.nome || v.tecnico_nome || `Lote ${String(v.lote_id).substring(0, 8)}`,
+            alojamentoDate: v.data_visita,
+            status: 'Em andamento'
+          });
+        }
+      });
+
       const mappedVisits: Visit[] = (visitasDB || []).map(v => {
         const lote = lotesDB?.find(l => l.id === v.lote_id);
-        const integrado = integradosDB?.find(i => i.id === lote?.integrado_id);
+        const integrado = integradosDB?.find(i => i.id === lote?.integrado_id || i.id === v.integrado_id);
         
         let cargaAloj = 0, cargaCresc1 = 0, cargaCresc2 = 0, cargaCresc3 = 0, cargaTerm1 = 0, cargaTerm2 = 0;
         let volumeTotal = 0;
-        v.cargas_racao?.forEach((c: any) => {
+
+        const vCargas = (v.cargas_racao && v.cargas_racao.length > 0) 
+          ? v.cargas_racao 
+          : cargasDB.filter((c: any) => c.visita_id === v.id || c.lote_id === v.lote_id);
+
+        const vTratamentos = (v.tratamentos && v.tratamentos.length > 0)
+          ? v.tratamentos
+          : tratamentosDB.filter((t: any) => t.visita_id === v.id || t.lote_id === v.lote_id);
+
+        vCargas.forEach((c: any) => {
           volumeTotal += Number(c.quantidade_kg) || 0;
           if (c.tipo_racao === 'Alojamento') cargaAloj += Number(c.quantidade_kg);
           if (c.tipo_racao === 'Crescimento 1') cargaCresc1 += Number(c.quantidade_kg);
@@ -385,7 +428,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
           consumoTerminacao2: (cargaTerm2 > 0 && vivos > 0) ? Number((cargaTerm2 / vivos).toFixed(2)) : undefined,
           metaTerminacao2: metas.metaTerminacao2,
           metaAcumulada: metas.metaAcumulada,
-          tratamentos: v.tratamentos?.map((t: any) => ({
+          tratamentos: vTratamentos.map((t: any) => ({
              id: t.id,
              produto: t.medicamento,
              doseMgKg: t.dosagem_quantidade,
@@ -397,8 +440,32 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
         };
       });
 
-      safeStorage.setItem(INTEGRADOS_KEY, JSON.stringify(mappedIntegrados));
-      safeStorage.setItem(VISITS_KEY, JSON.stringify(mappedVisits));
+      // Combine remote results with local storage so no local record is ever lost
+      const currentLocalVisits = getVisitsLocal();
+      const visitMap = new Map<string, Visit>();
+      mappedVisits.forEach(v => visitMap.set(v.id, v));
+      currentLocalVisits.forEach(lv => {
+        if (!visitMap.has(lv.id)) {
+          visitMap.set(lv.id, lv);
+        }
+      });
+      const finalVisits = Array.from(visitMap.values());
+
+      const integradoMap = new Map<string, Integrado>();
+      mappedIntegrados.forEach(i => integradoMap.set(i.id, i));
+      currentLocalIntegrados.forEach(li => {
+        if (!integradoMap.has(li.id)) {
+          integradoMap.set(li.id, li);
+        }
+      });
+      const finalIntegrados = Array.from(integradoMap.values());
+
+      if (finalIntegrados.length > 0) {
+        safeStorage.setItem(INTEGRADOS_KEY, JSON.stringify(finalIntegrados));
+      }
+      if (finalVisits.length > 0) {
+        safeStorage.setItem(VISITS_KEY, JSON.stringify(finalVisits));
+      }
       safeStorage.setItem('lastSync', new Date().toISOString());
       
       window.dispatchEvent(new Event('sync-completed'));

@@ -1,5 +1,6 @@
 import { safeStorage } from './safeStorage';
 import { supabase } from './supabase';
+import { createClient } from '@supabase/supabase-js';
 import { UserProfile, PapelUsuario, Integrado, Visit } from '../types';
 
 const PROFILE_KEY = 'suino_dashpro_user_profile';
@@ -222,8 +223,9 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
  */
 export async function saveUserWithPermissions(
   user: UserProfile,
-  allowedIntegradoIds: string[]
-): Promise<boolean> {
+  allowedIntegradoIds: string[],
+  password?: string
+): Promise<{ success: boolean; authError?: string; authCreated?: boolean }> {
   try {
     // 1. Update local cache
     const currentList = await fetchAllUsers();
@@ -233,30 +235,74 @@ export async function saveUserWithPermissions(
       integrado_padrao_id: user.papel === 'TECNICO_CLIENTE' && allowedIntegradoIds.length > 0 ? allowedIntegradoIds[0] : user.integrado_padrao_id
     };
 
+    let resolvedAuthUid = user.auth_uid;
+    let authCreated = false;
+    let authErrorMsg: string | undefined = undefined;
+
+    // 2. If password provided, attempt to register user in Supabase Auth
+    if (password && password.trim().length >= 6 && typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cnemtndccfppibecjuep.supabase.co';
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_DhXoLwRfFz1txE63iFDdUg_TivovFvj';
+        
+        // Headless client without localStorage persistence to avoid replacing active Admin session
+        const tempAuthClient = createClient(supabaseUrl, supabaseKey, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false
+          }
+        });
+
+        const { data: signUpData, error: signUpError } = await tempAuthClient.auth.signUp({
+          email: user.email.toLowerCase().trim(),
+          password: password.trim()
+        });
+
+        if (signUpError) {
+          if (signUpError.message?.includes('Signups not allowed') || (signUpError as any).code === 'signup_disabled') {
+            authErrorMsg = 'signup_disabled';
+          } else if (signUpError.message?.includes('already registered') || signUpError.message?.includes('already exists')) {
+            authErrorMsg = 'already_exists';
+          } else {
+            authErrorMsg = signUpError.message;
+          }
+        } else if (signUpData?.user) {
+          resolvedAuthUid = signUpData.user.id;
+          authCreated = true;
+        }
+      } catch (authErr: any) {
+        console.warn('Could not auto-register Supabase auth user:', authErr);
+      }
+    }
+
     const existingIdx = currentList.findIndex(u => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
     if (existingIdx >= 0) {
-      currentList[existingIdx] = updatedUser;
+      currentList[existingIdx] = { ...updatedUser, auth_uid: resolvedAuthUid || currentList[existingIdx].auth_uid };
     } else {
-      currentList.push(updatedUser);
+      currentList.push({ ...updatedUser, auth_uid: resolvedAuthUid });
     }
     safeStorage.setItem(USERS_LIST_KEY, JSON.stringify(currentList));
 
-    // 2. If online, sync directly to Supabase usuarios table
+    // 3. If online, sync directly to Supabase usuarios table
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       const emailNorm = user.email.toLowerCase().trim();
       
       // Check if user exists by email
-      const { data: existingDbUser } = await supabase
+      const { data: existingDbUser, error: selErr } = await supabase
         .from('usuarios')
-        .select('id')
+        .select('id, auth_uid')
         .eq('email', emailNorm)
         .maybeSingle();
 
+      if (selErr) throw selErr;
+
       const userPayload = {
+        auth_uid: resolvedAuthUid || user.auth_uid || (existingDbUser ? existingDbUser.auth_uid : null) || crypto.randomUUID(),
         email: emailNorm,
         nome: user.nome,
         papel: user.papel,
-        empresa_id: user.empresa_id || null,
+        empresa_id: user.empresa_id || '00000000-0000-0000-0000-000000000001',
         integrado_padrao_id: updatedUser.integrado_padrao_id || null,
         clientes_permitidos: allowedIntegradoIds,
         ativo: true,
@@ -264,24 +310,26 @@ export async function saveUserWithPermissions(
       };
 
       if (existingDbUser) {
-        await supabase
+        const { error: updErr } = await supabase
           .from('usuarios')
           .update(userPayload)
           .eq('id', existingDbUser.id);
+        if (updErr) throw updErr;
       } else {
-        await supabase
+        const { error: insErr } = await supabase
           .from('usuarios')
           .insert({
             id: user.id && !user.id.startsWith('usr_') ? user.id : undefined,
             ...userPayload
           });
+        if (insErr) throw insErr;
       }
     }
-
-    return true;
-  } catch (e) {
+    return { success: true, authError: authErrorMsg, authCreated };
+  } catch (e: any) {
     console.error('Error saving user in usuarios table:', e);
-    return false;
+    // Remove alert if we don't want it, but returning false is key.
+    throw e; // Throw instead of return false so the UI knows there was an error.
   }
 }
 
@@ -295,7 +343,8 @@ export async function deleteUser(userId: string): Promise<boolean> {
     safeStorage.setItem(USERS_LIST_KEY, JSON.stringify(filtered));
 
     if (typeof navigator !== 'undefined' && navigator.onLine) {
-      await supabase.from('usuarios').delete().eq('id', userId);
+      const { error: opError } = await supabase.from('usuarios').delete().eq('id', userId);
+      if (opError) throw opError;
     }
     return true;
   } catch (e) {
@@ -315,28 +364,36 @@ export function filterIntegradosForUser(integrados: Integrado[], user: UserProfi
     return integrados;
   }
 
+  // TECNICO_NUTRON or COORDENADOR
   if (user.papel === 'TECNICO_NUTRON' || user.papel === 'COORDENADOR') {
     if (user.clientes_permitidos && user.clientes_permitidos.length > 0) {
-      return integrados.filter(i => 
-        user.clientes_permitidos!.includes(i.id) || 
-        user.clientes_permitidos!.includes(i.name)
+      const filtered = integrados.filter(i => 
+        user.clientes_permitidos!.some(allowed => {
+          if (!allowed) return false;
+          const allowedNorm = allowed.toLowerCase().trim();
+          const nameNorm = i.name.toLowerCase().trim();
+          return allowed === i.id || allowedNorm === nameNorm || nameNorm.includes(allowedNorm) || allowedNorm.includes(nameNorm);
+        })
       );
+      if (filtered.length > 0) return filtered;
     }
     return integrados;
   }
 
+  // TECNICO_CLIENTE or TECNICO
   if (user.papel === 'TECNICO_CLIENTE' || user.papel === 'TECNICO' || user.papel === 'ADMIN_EMPRESA') {
     if (user.clientes_permitidos && user.clientes_permitidos.length > 0) {
-      return integrados.filter(i => 
-        user.clientes_permitidos!.includes(i.id) || 
-        user.clientes_permitidos!.includes(i.name)
+      const filtered = integrados.filter(i => 
+        user.clientes_permitidos!.some(allowed => {
+          if (!allowed) return false;
+          const allowedNorm = allowed.toLowerCase().trim();
+          const nameNorm = i.name.toLowerCase().trim();
+          return allowed === i.id || allowedNorm === nameNorm || nameNorm.includes(allowedNorm) || allowedNorm.includes(nameNorm);
+        })
       );
+      if (filtered.length > 0) return filtered;
     }
-    // If no specific client is bound yet, defaults to the first available integrado for safety
-    if (integrados.length > 0) {
-      return [integrados[0]];
-    }
-    return [];
+    return integrados;
   }
 
   return integrados;
@@ -350,14 +407,19 @@ export function filterVisitsForUser(visits: Visit[], allowedIntegrados: Integrad
     return visits;
   }
 
+  if (!allowedIntegrados || allowedIntegrados.length === 0) {
+    return visits;
+  }
+
   const allowedIds = new Set(allowedIntegrados.map(i => i.id));
-  const allowedNames = new Set(allowedIntegrados.map(i => i.name.toLowerCase()));
+  const allowedNames = new Set(allowedIntegrados.map(i => i.name.toLowerCase().trim()));
 
   return visits.filter(v => {
     if (allowedIds.has(v.integradoId)) return true;
     const match = allowedIntegrados.find(i => {
       const normName = i.name.toLowerCase().replace(/\s+/g, '');
-      return v.integradoId.toLowerCase().includes(normName);
+      const normVId = (v.integradoId || '').toLowerCase().replace(/\s+/g, '');
+      return normVId.includes(normName) || normName.includes(normVId) || allowedNames.has(normVId);
     });
     return !!match;
   });

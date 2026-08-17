@@ -38,10 +38,35 @@ export function Login({ onLoginSuccess }: LoginProps) {
       }
 
       // 2. Attempt online login with Supabase
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
+      let { data, error: authError } = await supabase.auth.signInWithPassword({
         email: normEmail,
         password,
       });
+
+      // Auto-signup logic: if credentials invalid, attempt to register them on the fly if allowed
+      if (authError && (authError.message.includes('Invalid login credentials') || authError.message.includes('invalid_credentials'))) {
+        try {
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: normEmail,
+            password,
+          });
+
+          if (!signUpError && signUpData?.session) {
+            data = signUpData as any;
+            authError = null;
+          } else if (signUpError && (signUpError.message?.includes('already registered') || signUpError.message?.includes('already exists'))) {
+            authError.message = 'Senha incorreta. Verifique a senha digitada.';
+          } else if (signUpData?.user && !signUpData.session) {
+            throw new Error('Conta criada, porém a confirmação de e-mail está ativada no Supabase. Vá em Authentication > Providers > Email e desative "Confirm email".');
+          } else if (signUpError && (signUpError.message?.includes('Signups not allowed') || (signUpError as any).code === 'signup_disabled')) {
+            authError.message = 'E-mail ou senha inválidos. Certifique-se de que o usuário foi criado no Supabase (Authentication > Users) com esta senha.';
+          }
+        } catch (e: any) {
+          if (e.message && !e.message.includes('fetch')) {
+            throw e;
+          }
+        }
+      }
 
       if (authError) {
         // Check if network error -> fallback to offline session
