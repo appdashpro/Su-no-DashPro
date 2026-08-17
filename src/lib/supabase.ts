@@ -1,13 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'public-anon-key';
+// Sanitize URL in case user accidentally added /rest/v1 or trailing slashes in the env var
+let supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co').trim();
+try {
+  const urlObj = new URL(supabaseUrl);
+  supabaseUrl = `${urlObj.protocol}//${urlObj.host}`;
+} catch (e) {
+  // Ignore if invalid URL
+}
+
+const supabaseKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || 'public-anon-key').trim();
 
 const customFetch = async (...args: any[]) => {
   try {
     return await fetch(...(args as [RequestInfo, RequestInit?]));
   } catch (error: any) {
-    console.error('customFetch failed for:', args[0], error);
+    console.warn('Network request dropped (handled by offline mode):', args[0]);
     // Treat any error during fetch as an offline/network error to avoid throwing objects that crash the app
     return new Response(JSON.stringify({ error: 'offline', message: 'Failed to fetch', details: error.toString() }), {
       status: 502,

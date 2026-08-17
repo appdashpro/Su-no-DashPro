@@ -283,12 +283,19 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
         }
       }
 
-      const { data: integradosDB, error: e1 } = await supabase.from('integrados').select('*');
-      if (e1) throw e1;
-      const { data: lotesDB, error: e2 } = await supabase.from('lotes').select('*');
-      if (e2) throw e2;
-      const { data: visitasDB, error: e3 } = await supabase.from('visitas').select('*, cargas_racao(*), tratamentos(*)');
-      if (e3) throw e3;
+      const [resIntegrados, resLotes, resVisitas] = await Promise.all([
+        supabase.from('integrados').select('*'),
+        supabase.from('lotes').select('*'),
+        supabase.from('visitas').select('*, cargas_racao(*), tratamentos(*)')
+      ]);
+
+      if (resIntegrados.error) throw resIntegrados.error;
+      if (resLotes.error) throw resLotes.error;
+      if (resVisitas.error) throw resVisitas.error;
+
+      const integradosDB = resIntegrados.data;
+      const lotesDB = resLotes.data;
+      const visitasDB = resVisitas.data;
 
       const currentLocalIntegrados = getIntegradosLocal();
       const mappedIntegrados: Integrado[] = (lotesDB || []).map(lote => {
@@ -395,8 +402,12 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
       
       window.dispatchEvent(new Event('sync-completed'));
       return true;
-    } catch (e) {
-      console.error('Error syncing:', e);
+    } catch (e: any) {
+      if (e?.message?.includes('fetch') || e?.message?.includes('network') || e?.message?.includes('Failed')) {
+          console.warn('Sync failed due to network, falling back to offline mode.');
+      } else {
+          console.error('Error syncing:', e);
+      }
       throw e;
     }
   },
