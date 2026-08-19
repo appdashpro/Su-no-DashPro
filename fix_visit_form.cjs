@@ -1,23 +1,26 @@
 const fs = require('fs');
-let content = fs.readFileSync('src/components/VisitForm.tsx', 'utf8');
 
-// Fix 1: Vivos calculation
-content = content.replace(
-  /const mortos = Number\(newData\.animaisMortos\) \|\| 0;\n\s*const vivos = alojados - mortos;/,
-  'const mortos = Number(newData.animaisMortos) || 0;\n    const descartes = Number(newData.descartesPeriodo) || 0;\n    const vivos = alojados - mortos - descartes;'
+let file2 = 'src/components/VisitForm.tsx';
+let code2 = fs.readFileSync(file2, 'utf8');
+
+code2 = code2.replace(
+  `pesoAmostradoKg={formData.pesoAmostradoKg !== '' ? Number(formData.pesoAmostradoKg) : undefined}`,
+  `pesoAmostradoKg={formData.pesoAmostradoKg !== undefined && String(formData.pesoAmostradoKg) !== '' ? Number(formData.pesoAmostradoKg) : undefined}`
 );
 
-// Fix 2: Display vivos
-content = content.replace(
-  /\{\(Number\(formData\.animaisAlojados\) \|\| 0\) - \(Number\(formData\.animaisMortos\) \|\| 0\)\} vivos/g,
-  '{(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0) - (Number(formData.descartesPeriodo) || 0)} vivos'
+code2 = code2.replace(
+  `onPesoChange={(peso) => setFormData(prev => ({ ...prev, pesoAmostradoKg: peso !== undefined ? String(peso) : '' }))}`,
+  `onPesoChange={(peso) => setFormData(prev => ({ ...prev, pesoAmostradoKg: peso !== undefined ? peso : undefined }))}`
 );
 
-// Fix 3: tratamentos animaisVivos
-content = content.replace(
-  /animaisVivos=\{\(Number\(formData\.animaisAlojados\) \|\| 0\) - \(Number\(formData\.animaisMortos\) \|\| 0\)\}/g,
-  'animaisVivos={(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0) - (Number(formData.descartesPeriodo) || 0)}'
+fs.writeFileSync(file2, code2);
+
+let file1 = 'src/components/TratamentosFormSection.tsx';
+let code1 = fs.readFileSync(file1, 'utf8');
+code1 = code1.replace(
+  `if (t.doseMgKg && newWeight && animaisVivos) {`,
+  `if (t.doseMgKg && effectiveNewWeight && animaisVivos) {`
 );
 
-fs.writeFileSync('src/components/VisitForm.tsx', content);
-console.log('Fixed vivos calculation in VisitForm');
+fs.writeFileSync(file1, code1);
+console.log("Fixed types");

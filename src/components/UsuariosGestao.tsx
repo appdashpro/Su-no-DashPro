@@ -30,9 +30,10 @@ import { fetchAllUsers, saveUserWithPermissions, deleteUser, MASTER_EMAILS } fro
 interface UsuariosGestaoProps {
   integrados: Integrado[];
   currentUser: UserProfile | null;
+  onImpersonate?: (user: UserProfile) => void;
 }
 
-export function UsuariosGestao({ integrados, currentUser }: UsuariosGestaoProps) {
+export function UsuariosGestao({ integrados, currentUser, onImpersonate }: UsuariosGestaoProps) {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +60,7 @@ export function UsuariosGestao({ integrados, currentUser }: UsuariosGestaoProps)
 
   // SQL Script Viewer Modal
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
+  const [isRpcModalOpen, setIsRpcModalOpen] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
 
   const loadUsers = async () => {
@@ -144,8 +146,8 @@ export function UsuariosGestao({ integrados, currentUser }: UsuariosGestaoProps)
         nome: formData.nome.trim(),
         email: formData.email.trim().toLowerCase(),
         papel: formData.papel,
-        empresa_id: (formData.papel === 'TECNICO_CLIENTE' || formData.papel === 'ADMIN_EMPRESA') ? formData.empresa_id : undefined,
-        clientes_permitidos: formData.papel === 'TECNICO_NUTRON' ? formData.selectedIntegrados : []
+        empresa_id: (formData.papel === 'TECNICO_CLIENTE' || formData.papel === 'ADMIN_EMPRESA' || formData.papel === 'TECNICO') ? formData.empresa_id : undefined,
+        clientes_permitidos: (formData.papel === 'TECNICO_CLIENTE' || formData.papel === 'ADMIN_EMPRESA' || formData.papel === 'TECNICO') ? [formData.empresa_id] : ((formData.papel === 'TECNICO_NUTRON' || formData.papel === 'COORDENADOR') ? formData.selectedIntegrados : [])
       };
 
       const result = await saveUserWithPermissions(
@@ -155,8 +157,14 @@ export function UsuariosGestao({ integrados, currentUser }: UsuariosGestaoProps)
       );
 
       if (result.success) {
+        if (result.authError === 'rpc_missing') {
+          setError('Para alterar e-mail/senha de um usuário existente, instale a Função SQL (RPC) no Supabase.');
+          setIsRpcModalOpen(true);
+          return; // Do not close the modal
+        }
+        
         if (result.authCreated) {
-          setSaveSuccess(`Usuário e Login criados com sucesso no Supabase! Senha definida.`);
+          setSaveSuccess(`Usuário e credenciais de login atualizados no Supabase com sucesso!`);
         } else if (result.authError === 'signup_disabled') {
           setSaveSuccess('Usuário salvo nas permissões com sucesso!');
           setAuthWarning(
@@ -462,19 +470,34 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
                       </td>
                       <td className="px-5 py-4">
                         {isMaster && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-purple-100 text-purple-800 rounded-full border border-purple-200">
+                          <button 
+                            type="button"
+                            onClick={() => { if (currentUser?.papel === 'MASTER' && onImpersonate) onImpersonate(user); }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-purple-100 text-purple-800 rounded-full border border-purple-200 ${currentUser?.papel === 'MASTER' ? 'cursor-pointer hover:bg-purple-200 transition-colors' : ''}`}
+                            title={currentUser?.papel === 'MASTER' ? "Entrar como este usuário" : ""}
+                          >
                             👑 Acesso Master
-                          </span>
+                          </button>
                         )}
                         {isNutron && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-blue-100 text-blue-800 rounded-full border border-blue-200">
+                          <button 
+                            type="button"
+                            onClick={() => { if (currentUser?.papel === 'MASTER' && onImpersonate) onImpersonate(user); }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-blue-100 text-blue-800 rounded-full border border-blue-200 ${currentUser?.papel === 'MASTER' ? 'cursor-pointer hover:bg-blue-200 transition-colors' : ''}`}
+                            title={currentUser?.papel === 'MASTER' ? "Entrar como este usuário" : ""}
+                          >
                             🏢 Técnico Nutron
-                          </span>
+                          </button>
                         )}
                         {isClient && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">
+                          <button 
+                            type="button"
+                            onClick={() => { if (currentUser?.papel === 'MASTER' && onImpersonate) onImpersonate(user); }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200 ${currentUser?.papel === 'MASTER' ? 'cursor-pointer hover:bg-emerald-200 transition-colors' : ''}`}
+                            title={currentUser?.papel === 'MASTER' ? "Entrar como este usuário" : ""}
+                          >
                             🚜 Técnico Cliente
-                          </span>
+                          </button>
                         )}
                       </td>
                       <td className="px-5 py-4">
@@ -718,6 +741,89 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      
+      {/* RPC SQL Setup Modal for Updating Users */}
+      {isRpcModalOpen && (
+        <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Code2 className="w-5 h-5 text-emerald-600" />
+                <h3 className="text-base font-bold text-slate-900">
+                  Habilitar Alteração de E-mail e Senha
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsRpcModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-lg"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="py-3 text-xs text-slate-600 flex-1 overflow-y-auto">
+              <p className="mb-2">
+                O Supabase bloqueia a alteração de credenciais (e-mail/senha) diretamente pelo cliente por questões de segurança nativas (Privacidade de Sessão).
+              </p>
+              <p className="mb-3 text-slate-500">
+                Para permitir que o <strong>Acesso Master</strong> atualize os acessos de outros técnicos, precisamos injetar uma permissão segura (RPC) no banco.
+                Copie o script abaixo e execute no <strong>SQL Editor</strong> do painel do Supabase.
+              </p>
+              <div className="bg-slate-900 text-slate-200 rounded-xl p-4 font-mono text-[11px] border border-slate-800">
+                <pre>{`-- Função Segura (RPC) para Forçar Atualização de Senha/Email
+CREATE OR REPLACE FUNCTION admin_update_user_credentials(
+  target_old_email TEXT,
+  new_email TEXT,
+  new_password TEXT
+) RETURNS boolean AS $
+DECLARE
+  v_user_id UUID;
+BEGIN
+  -- Tenta encontrar o usuário pelo email antigo
+  SELECT id INTO v_user_id FROM auth.users WHERE email = target_old_email LIMIT 1;
+  
+  IF v_user_id IS NULL THEN
+    RETURN false;
+  END IF;
+
+  -- Atualiza e-mail
+  IF new_email IS NOT NULL AND new_email != target_old_email THEN
+    UPDATE auth.users
+    SET 
+      email = new_email,
+      email_confirmed_at = now(),
+      updated_at = now()
+    WHERE id = v_user_id;
+  END IF;
+
+  -- Atualiza senha (apenas se for fornecida)
+  IF new_password IS NOT NULL AND length(new_password) >= 6 THEN
+    UPDATE auth.users
+    SET 
+      encrypted_password = crypt(new_password, gen_salt('bf', 10)),
+      updated_at = now()
+    WHERE id = v_user_id;
+  END IF;
+  
+  RETURN true;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;`}</pre>
+              </div>
+              <p className="mt-3 text-emerald-600 font-semibold">
+                Após executar o script no Supabase, tente clicar em Salvar novamente nesta tela.
+              </p>
+            </div>
+            <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
+              <button
+                onClick={() => setIsRpcModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 transition-colors text-slate-700 font-semibold rounded-lg text-xs"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}

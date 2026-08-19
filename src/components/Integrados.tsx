@@ -3,7 +3,9 @@ import { Integrado, Visit } from '../types';
 import { getExpectedConsumption } from '../data';
 import { Users, ClipboardList, Search, Filter, ArrowUpDown, Calendar, AlertCircle, CheckCircle2, Clock, X, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { IntegradoDetailsModal } from './IntegradoDetailsModal';
 import { AnimatePresence, motion } from 'motion/react';
+import { getSavedUserProfile } from '../lib/auth';
 
 interface IntegradosProps {
   integrados: Integrado[];
@@ -21,10 +23,14 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
   const [editStatus, setEditStatus] = useState<'Em andamento' | 'Fechado'>('Em andamento');
   const [editFechamentoDate, setEditFechamentoDate] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [selectedIntegradoDetails, setSelectedIntegradoDetails] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'Todos' | 'Em andamento' | 'Fechado'>('Todos');
   const [filterVisitStatus, setFilterVisitStatus] = useState<'Todos' | 'Em dia' | 'Atenção' | 'Atrasado'>('Todos');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'atraso-desc' | 'atraso-asc'>('date-desc');
+
+  const userProfile = getSavedUserProfile();
+  const isTecnicoCliente = userProfile?.papel === 'TECNICO_CLIENTE';
 
   const processedData = useMemo(() => {
     const today = new Date();
@@ -138,8 +144,9 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
           <table className="w-full text-left text-sm text-slate-600 min-w-[900px] relative">
             <thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200 sticky top-0 z-20 shadow-sm">
               <tr>
+                <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50 text-slate-400 font-bold w-10 text-center">#</th>
                 <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Lote</th>
-                <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Cliente</th>
+                {!isTecnicoCliente && <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Cliente</th>}
                 <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Produtor</th>
                 <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Status Lote</th>
                 <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Alojamento/Fech.</th>
@@ -151,7 +158,7 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
             </thead>
             <tbody className="divide-y divide-slate-100">
               <AnimatePresence>
-              {processedData.map(i => {
+              {processedData.map((i, index) => {
                 let consumoStr = '-';
                 let consumoColor = 'text-slate-500';
                 let consumoBg = 'bg-slate-100';
@@ -199,6 +206,9 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
                     key={i.id} 
                     className="hover:bg-slate-50 transition-colors"
                   >
+                    <td className="px-3 py-2 whitespace-nowrap text-xs font-semibold text-slate-400 text-center">
+                      {index + 1}
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-700">
                       {editingId === i.id ? (
                         <input 
@@ -211,9 +221,9 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
                         i.loteNumber || '-'
                       )}
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-slate-600">
+                    {!isTecnicoCliente && <td className="px-3 py-2 whitespace-nowrap text-slate-600">
                       {i.empresaName || '-'}
-                    </td>
+                    </td>}
                     <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-900">
                       {editingId === i.id ? (
                         <input 
@@ -329,7 +339,15 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
                           </button>
                         </div>
                       ) : (
+                        
                         <div className="flex items-center justify-end gap-3">
+                          <button 
+                            onClick={() => setSelectedIntegradoDetails(i.id)}
+                            className="text-slate-600 hover:text-slate-900 text-xs font-semibold px-2 py-1 rounded hover:bg-slate-100 transition-colors"
+                            title="Ver Detalhes do Lote"
+                          >
+                            Detalhes
+                          </button>
                           <button 
                             onClick={() => {
                               setEditingId(i.id);
@@ -415,6 +433,15 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
           </div>
         )}
       </AnimatePresence>
+    
+      {selectedIntegradoDetails && (
+        <IntegradoDetailsModal
+          integradoId={selectedIntegradoDetails}
+          visits={visits}
+          integrados={integrados}
+          onClose={() => setSelectedIntegradoDetails(null)}
+        />
+      )}
     </div>
   );
 }

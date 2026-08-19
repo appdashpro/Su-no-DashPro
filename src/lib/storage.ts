@@ -403,12 +403,17 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
           pontuacaoSanitaria: Number(v.pontuacao_sanitaria) || undefined,
           volumeTotalCargas: volumeTotal,
           consumoAcumuladoReal: (() => {
-             const kgConsumidos = volumeTotal - (Number(v.sobra_silo_kg) || 0);
-             return (vivos > 0 && kgConsumidos > 0) ? Number((kgConsumidos / vivos).toFixed(2)) : 0;
+             return (vivos > 0 && volumeTotal > 0) ? Number((volumeTotal / vivos).toFixed(2)) : 0;
           })(),
           sobraSiloKg: Number(v.sobra_silo_kg) || 0,
           descartesPeriodo: Number(v.descartes_periodo) || 0,
-          pesoAmostradoKg: Number(v.peso_amostrado_kg) || 0,
+          pesoAmostradoKg: (() => {
+            const vPeso = Number(v.peso_amostrado_kg);
+            if (!isNaN(vPeso) && vPeso > 0) return vPeso;
+            const tPeso = vTratamentos.find((t: any) => t.peso_estimado_kg != null && Number(t.peso_estimado_kg) > 0)?.peso_estimado_kg;
+            if (tPeso != null && Number(tPeso) > 0) return Number(tPeso);
+            return undefined;
+          })(),
           cargaAlojamento: cargaAloj > 0 ? cargaAloj : undefined,
           consumoAlojamento: (cargaAloj > 0 && vivos > 0) ? Number((cargaAloj / vivos).toFixed(2)) : undefined,
           metaAlojamento: metas.metaAlojamento,
@@ -428,24 +433,41 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
           consumoTerminacao2: (cargaTerm2 > 0 && vivos > 0) ? Number((cargaTerm2 / vivos).toFixed(2)) : undefined,
           metaTerminacao2: metas.metaTerminacao2,
           metaAcumulada: metas.metaAcumulada,
-          tratamentos: vTratamentos.map((t: any) => ({
-             id: t.id,
-             produto: t.medicamento,
-             doseMgKg: t.dosagem_quantidade,
-             duracaoDias: t.dias_duracao,
-             carenciaDias: t.carencia_dias,
-             motivo: t.motivo,
-             concentracao: t.concentracao
-          }))
+          tratamentos: vTratamentos.map((t: any) => {
+            const tPeso = (t.peso_estimado_kg != null && Number(t.peso_estimado_kg) > 0)
+              ? Number(t.peso_estimado_kg)
+              : (v.peso_amostrado_kg && Number(v.peso_amostrado_kg) > 0 ? Number(v.peso_amostrado_kg) : undefined);
+            return {
+              id: t.id,
+              produto: t.medicamento,
+              doseMgKg: t.dosagem_quantidade,
+              duracaoDias: t.dias_duracao,
+              carenciaDias: t.carencia_dias,
+              motivo: t.motivo,
+              concentracao: t.concentracao,
+              pesoEstimadoKg: tPeso
+            };
+          })
         };
       });
 
-      // Combine remote results with local storage so no local record is ever lost
+      // Combine remote results with local storage intelligently
       const currentLocalVisits = getVisitsLocal();
       const visitMap = new Map<string, Visit>();
       mappedVisits.forEach(v => visitMap.set(v.id, v));
+      
+      // ONLY resurrect local visits if they are actively pending in the offline queue
+      const vQueueStr = safeStorage.getItem(OFFLINE_QUEUE_KEY);
+      let pendingVIds = new Set<string>();
+      if (vQueueStr) {
+        try {
+          const queue = JSON.parse(vQueueStr);
+          queue.forEach((v: any) => pendingVIds.add(v.id));
+        } catch (e) {}
+      }
+
       currentLocalVisits.forEach(lv => {
-        if (!visitMap.has(lv.id)) {
+        if (!visitMap.has(lv.id) && pendingVIds.has(lv.id)) {
           visitMap.set(lv.id, lv);
         }
       });
@@ -453,9 +475,20 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
 
       const integradoMap = new Map<string, Integrado>();
       mappedIntegrados.forEach(i => integradoMap.set(i.id, i));
+      
+      // ONLY resurrect local integrados if they are pending upload
+      // For now, we don't have an explicit 'pending create integrado' queue, but any local
+      // integrado that starts with 'local-' or is not in DB can be kept if we assume offline creation.
+      // However, to fix ghosting, we should only keep them if they don't look like UUIDs, or if they have visits pending.
       currentLocalIntegrados.forEach(li => {
         if (!integradoMap.has(li.id)) {
-          integradoMap.set(li.id, li);
+          // If it has a local-only format or is referenced by a pending visit, keep it.
+          if (li.id.length < 36 || Array.from(pendingVIds).some(vid => {
+            const v = currentLocalVisits.find(cv => cv.id === vid);
+            return v && v.integradoId === li.id;
+          })) {
+             integradoMap.set(li.id, li);
+          }
         }
       });
       const finalIntegrados = Array.from(integradoMap.values());
@@ -510,17 +543,8 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
     const userId = session?.user?.id;
     
     if (userId) {
-       // Upsert user to avoid FK constraint violation
-       try {
-           await supabase.from('usuarios').upsert({
-               id: userId,
-               auth_uid: userId,
-               empresa_id: EMPRESA_ID,
-               nome: session?.user?.email?.split('@')[0] || 'Usuário',
-               email: session?.user?.email || '',
-               ativo: true
-           });
-       } catch (err) {} // ignore errors, let it fail at visita insert if it didn't work
+       // A empresa padrão (Rações Pastre) já é criada no setup do banco.
+       // User resolution happens per-visita to ensure robust fallback
     }
 
     const toProcess = visitsToSyncToSupabase || visits;
@@ -550,8 +574,11 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
 
            const dbLote = await supabase.from('lotes').select('animais_alojados').eq('id', loteId).maybeSingle();
             let finalAloj = Math.round(v.animaisAlojados || 0);
-            if ((finalAloj === 100 || finalAloj === 500 || finalAloj === 550 || finalAloj === 0) && dbLote.data?.animais_alojados) {
-               finalAloj = dbLote.data.animais_alojados;
+           if (dbLote.data?.animais_alojados && dbLote.data.animais_alojados > 0) {
+               const isVisitaAlojamento = (localLote.alojamentoDate === v.date || v.idade === 0);
+               if (!(isVisitaAlojamento && finalAloj > 0 && finalAloj !== 100 && finalAloj !== 500 && finalAloj !== 550)) {
+                   finalAloj = dbLote.data.animais_alojados;
+               }
             }
 
             await supabase.from('lotes').upsert({
@@ -566,19 +593,62 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
            });
        }
        
+       let finalUserId = '910e47b0-22c9-497e-9eaa-0816d7fce6d4'; // Fallback admin
+       let finalEmpresaId = localLote?.empresaId || EMPRESA_ID;
+       
+       if (userId) {
+           // 1. Try to find user by auth_uid
+           let { data: userProfile } = await supabase.from('usuarios').select('id, empresa_id').eq('auth_uid', userId).maybeSingle();
+           
+           // 2. Try to find user by email
+           if (!userProfile && session?.user?.email) {
+               const { data: userByEmail } = await supabase.from('usuarios').select('id, empresa_id').eq('email', session.user.email).maybeSingle();
+               userProfile = userByEmail;
+               
+               // Update auth_uid if found by email
+               if (userProfile) {
+                   await supabase.from('usuarios').update({ auth_uid: userId }).eq('id', userProfile.id);
+               }
+           }
+           
+           if (userProfile) {
+               finalUserId = userProfile.id;
+               if (userProfile.empresa_id) {
+                   finalEmpresaId = userProfile.empresa_id;
+               }
+           } else {
+               console.warn("User not found in usuarios table. Falling back to known admin.");
+               // Try to insert the user gracefully if missing
+               try {
+                   const { data: newUser } = await supabase.from('usuarios').insert({
+                       auth_uid: userId,
+                       email: session?.user?.email || '',
+                       nome: session?.user?.email?.split('@')[0] || 'Usuário',
+                       papel: 'TECNICO_CLIENTE',
+                       empresa_id: EMPRESA_ID,
+                       ativo: true
+                   }).select('id').single();
+                   if (newUser) {
+                       finalUserId = newUser.id;
+                       finalEmpresaId = EMPRESA_ID;
+                   }
+               } catch(e) {
+                   console.error("Fallback insert failed:", e);
+               }
+           }
+       }
+       
        const visitaRow = {
           id: v.id,
-          empresa_id: localLote?.empresaId || EMPRESA_ID,
+          empresa_id: finalEmpresaId,
           lote_id: loteId,
-          usuario_id: userId,
+          usuario_id: finalUserId,
           data_visita: v.date,
           mortalidade_periodo: Math.round(v.animaisMortos || 0),
           descartes_periodo: Math.round(v.descartesPeriodo || 0),
-          sobra_silo_kg: v.sobraSiloKg || 0,
           pontuacao_sanitaria: v.pontuacaoSanitaria?.toString() || null,
           recomendacoes: v.recomendacao || null,
-          tecnico_nome: v.colaborador || null,
-          peso_amostrado_kg: v.pesoAmostradoKg || null
+          tecnico_nome: v.colaborador || null
        };
 
        const { error: errVisita } = await supabase.from('visitas').upsert(visitaRow);
@@ -595,9 +665,14 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
 
        // Also update the Lote since VisitForm can change lote-level fields
        const dbLote2 = await supabase.from('lotes').select('animais_alojados').eq('id', loteId).maybeSingle();
+       
        let finalAloj2 = Math.round(v.animaisAlojados || 0);
-       if ((finalAloj2 === 100 || finalAloj2 === 500 || finalAloj2 === 550 || finalAloj2 === 0) && dbLote2.data?.animais_alojados) {
-          finalAloj2 = dbLote2.data.animais_alojados;
+       
+       if (dbLote2.data?.animais_alojados && dbLote2.data.animais_alojados > 0) {
+           const isVisitaAlojamento2 = (localLote?.alojamentoDate === v.date || v.idade === 0);
+           if (!(isVisitaAlojamento2 && finalAloj2 > 0 && finalAloj2 !== 100 && finalAloj2 !== 500 && finalAloj2 !== 550)) {
+               finalAloj2 = dbLote2.data.animais_alojados;
+           }
        }
 
        const { error: errLote } = await supabase.from('lotes').update({
@@ -625,7 +700,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
        if (cargas.length > 0) {
          const cargasToInsert = cargas.map(c => ({
             id: crypto.randomUUID(),
-            empresa_id: localLote?.empresaId || EMPRESA_ID,
+            empresa_id: finalEmpresaId,
             visita_id: v.id,
             lote_id: loteId,
             tipo_racao: c.tipo,
@@ -643,7 +718,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
        if (v.tratamentos && v.tratamentos.length > 0) {
          const tratamentosToInsert = v.tratamentos.map(t => ({
             id: (t.id && t.id.length === 36 && t.id.includes("-")) ? t.id : crypto.randomUUID(),
-            empresa_id: localLote?.empresaId || EMPRESA_ID,
+            empresa_id: finalEmpresaId,
             visita_id: v.id,
             lote_id: loteId,
             medicamento: t.produto,
@@ -653,7 +728,12 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
             dias_duracao: t.duracaoDias || 0,
             carencia_dias: t.carenciaDias || null,
             motivo: t.motivo || null,
-            concentracao: t.concentracao || null
+            concentracao: t.concentracao || null,
+            peso_estimado_kg: (t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)
+              ? Number(t.pesoEstimadoKg)
+              : (v.pesoAmostradoKg && Number(v.pesoAmostradoKg) > 0)
+                ? Number(v.pesoAmostradoKg)
+                : null
          }));
          const { error: errTratamentos } = await supabase.from('tratamentos').insert(tratamentosToInsert);
          if (errTratamentos) {

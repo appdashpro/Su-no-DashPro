@@ -88,13 +88,35 @@ export default function App() {
  const [isVisitFormOpen, setIsVisitFormOpen] = useState(false);
  const [isNewLoteMode, setIsNewLoteMode] = useState(false);
  const [viewingIntegradoId, setViewingIntegradoId] = useState<string | null>(null);
+ const [selectedEmpresaFilter, setSelectedEmpresaFilter] = useState<string | null>(null);
  
  const [integrados, setIntegrados] = useState<Integrado[]>([]);
+ const [empresas, setEmpresas] = useState<any[]>([]);
+
+ const loadEmpresas = useCallback(async () => {
+   if (typeof window !== "undefined") {
+     const cached = safeStorage.getItem('CACHED_EMPRESAS');
+     if (cached) {
+       try { setEmpresas(JSON.parse(cached)); } catch(e) {}
+     }
+   }
+   if (typeof window !== "undefined" && !navigator.onLine) return;
+   try {
+     const { data, error } = await supabase.from("empresas").select("*").eq("ativo", true);
+     if (!error && data) {
+       setEmpresas(data);
+       if (typeof window !== "undefined") safeStorage.setItem('CACHED_EMPRESAS', JSON.stringify(data));
+     }
+   } catch(e) {
+     console.warn("Failed to load empresas", e);
+   }
+ }, []);
  const [visits, setVisits] = useState<Visit[]>([]);
  const [pendingSyncIds, setPendingSyncIds] = useState<string[]>([]);
  const [loading, setLoading] = useState(true);
  const [session, setSession] = useState<any>(null);
  const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(() => getSavedUserProfile());
+  const [masterUserProfile, setMasterUserProfile] = useState<UserProfile | null>(null);
  const [dbError, setDbError] = useState<string | null>(null);
  const [runTutorial, setRunTutorial] = useState(() => {
  if (typeof window !== 'undefined') {
@@ -299,6 +321,7 @@ export default function App() {
    setCurrentUserProfile(profile);
    setSession({ user: { id: profile.id, email: profile.email } });
    loadData();
+   loadEmpresas();
  };
 
  window.addEventListener('offline-login', handleOfflineLogin);
@@ -316,6 +339,7 @@ export default function App() {
        console.warn('Error resolving user profile:', e);
      }
      loadData();
+     loadEmpresas();
    } else {
      const saved = getSavedUserProfile();
      if (saved && typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -394,7 +418,7 @@ export default function App() {
 
  }, [integrados]);
 
- const processIntegradoFromVisit = async (newVisit: Visit, integradoNome?: string, alojamentoDate?: string) => {
+ const processIntegradoFromVisit = async (newVisit: Visit, integradoNome?: string, alojamentoDate?: string, empresaId?: string) => {
  if (!integradoNome || !alojamentoDate) return;
  const existing = integrados.find(i => i.id === newVisit.integradoId);
  if (!existing) {
@@ -402,22 +426,23 @@ export default function App() {
      id: newVisit.integradoId,
      name: integradoNome,
      alojamentoDate,
-     status: 'Em andamento'
+     status: 'Em andamento',
+     empresaId: empresaId || undefined
    };
    const updatedIntegrados = [...integrados, newIntegrado];
    setIntegrados(updatedIntegrados);
    await storage.saveIntegrados(updatedIntegrados);
- } else if (existing.name !== integradoNome || existing.alojamentoDate !== alojamentoDate) {
-   const updatedIntegrados = integrados.map(i => i.id === existing.id ? { ...i, name: integradoNome, alojamentoDate } : i);
+ } else if (existing.name !== integradoNome || existing.alojamentoDate !== alojamentoDate || (empresaId && existing.empresaId !== empresaId)) {
+   const updatedIntegrados = integrados.map(i => i.id === existing.id ? { ...i, name: integradoNome, alojamentoDate, empresaId: empresaId || i.empresaId } : i);
    setIntegrados(updatedIntegrados);
    await storage.saveIntegrados(updatedIntegrados);
  }
  };
 
- const handleAddVisit = async (newVisit: Visit, integradoNome?: string, alojamentoDate?: string) => {
+ const handleAddVisit = async (newVisit: Visit, integradoNome?: string, alojamentoDate?: string, empresaId?: string) => {
  setIsVisitFormOpen(false);
  try {
- await processIntegradoFromVisit(newVisit, integradoNome, alojamentoDate);
+ await processIntegradoFromVisit(newVisit, integradoNome, alojamentoDate, empresaId);
  const updatedVisits = [...visits, newVisit];
  setVisits(updatedVisits);
  const savedVisits = await storage.saveVisits(updatedVisits, [newVisit]);
@@ -432,11 +457,11 @@ export default function App() {
  }
  };
 
- const handleUpdateVisit = async (updatedVisit: Visit, integradoNome?: string, alojamentoDate?: string) => {
+ const handleUpdateVisit = async (updatedVisit: Visit, integradoNome?: string, alojamentoDate?: string, empresaId?: string) => {
  setEditingVisitId(null);
  setIsVisitFormOpen(false);
  try {
- await processIntegradoFromVisit(updatedVisit, integradoNome, alojamentoDate);
+ await processIntegradoFromVisit(updatedVisit, integradoNome, alojamentoDate, empresaId);
  const updatedVisits = visits.map(v => v.id === updatedVisit.id ? updatedVisit : v);
  setVisits(updatedVisits);
  const savedVisits = await storage.saveVisits(updatedVisits, [updatedVisit]);
@@ -646,7 +671,30 @@ export default function App() {
  }
  };
 
- const visibleIntegrados = React.useMemo(() => filterIntegradosForUser(integrados, currentUserProfile), [integrados, currentUserProfile]);
+ const visibleEmpresas = React.useMemo(() => {
+   if (!currentUserProfile || currentUserProfile.papel === 'MASTER' || currentUserProfile.papel === 'SUPER_ADMIN') {
+     return empresas;
+   }
+   if (currentUserProfile.papel === 'TECNICO_NUTRON' || currentUserProfile.papel === 'COORDENADOR') {
+     if (currentUserProfile.clientes_permitidos && currentUserProfile.clientes_permitidos.length > 0) {
+       return empresas.filter(e => currentUserProfile.clientes_permitidos!.includes(e.id));
+     }
+     return [];
+   }
+   if (currentUserProfile.empresa_id) {
+     return empresas.filter(e => e.id === currentUserProfile.empresa_id);
+   }
+   return empresas;
+ }, [empresas, currentUserProfile]);
+
+ const visibleIntegrados = React.useMemo(() => {
+   let filtered = filterIntegradosForUser(integrados, currentUserProfile);
+   if (selectedEmpresaFilter) {
+     filtered = filtered.filter(i => i.empresaId === selectedEmpresaFilter);
+   }
+   return filtered;
+ }, [integrados, currentUserProfile, selectedEmpresaFilter]);
+ 
  const visibleVisits = React.useMemo(() => filterVisitsForUser(visits, visibleIntegrados, currentUserProfile), [visits, visibleIntegrados, currentUserProfile]);
 
  const renderContent = () => {
@@ -666,6 +714,7 @@ export default function App() {
  <div className="space-y-6">
  <VisitaForm 
  integrados={visibleIntegrados} 
+ empresas={visibleEmpresas}
  visits={visibleVisits}
  initialData={editingVisitId ? visits.find(v => v.id === editingVisitId) : undefined}
  isNewLote={isNewLoteMode}
@@ -703,7 +752,11 @@ export default function App() {
  {currentTab === 'medicamentos' && <MedicationAnalysis visits={visibleVisits} integrados={visibleIntegrados} />}
  {currentTab === 'curva' && <ReferenceCurve />}
  {currentTab === 'importar' && <ImportData onImportComplete={() => { loadData(); setCurrentTab('dashboard'); }} />}
- {currentTab === 'usuarios' && <UsuariosGestao integrados={integrados} currentUser={currentUserProfile} />}
+ {currentTab === 'usuarios' && <UsuariosGestao integrados={integrados} currentUser={currentUserProfile} onImpersonate={(user) => {
+  setMasterUserProfile(currentUserProfile);
+  setCurrentUserProfile(user);
+  setCurrentTab('dashboard');
+}} />}
 
  {viewingIntegradoId && (
  <IntegradoDetailsModal
@@ -753,6 +806,7 @@ export default function App() {
  const handleLogout = async () => {
    clearAuthCache();
    setCurrentUserProfile(null);
+    setMasterUserProfile(null);
    setSession(null);
    try {
      await supabase.auth.signOut();
@@ -761,17 +815,6 @@ export default function App() {
    }
  };
 
- const getRoleBadge = () => {
-   if (!currentUserProfile) return null;
-   const role = currentUserProfile.papel;
-   if (role === 'MASTER' || role === 'SUPER_ADMIN') {
-     return <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-300 dark:border-purple-800 rounded-full uppercase tracking-wider">👑 Acesso Master</span>;
-   }
-   if (role === 'TECNICO_NUTRON' || role === 'COORDENADOR') {
-     return <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-300 dark:border-blue-800 rounded-full uppercase tracking-wider">🏢 Técnico Nutron</span>;
-   }
-   return <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-full uppercase tracking-wider">🚜 Técnico Cliente</span>;
- };
 
  return (
  <div className="flex h-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
@@ -790,6 +833,10 @@ export default function App() {
    onStartTutorial={() => { setRunTutorial(true); setIsSidebarOpen(false); }}
    userProfile={currentUserProfile}
    onLogout={handleLogout}
+   lastSyncTime={lastSyncTime}
+   isOnline={isOnline}
+   isSyncing={isSyncing}
+   onForceSync={handleForceSync}
  />
  </div>
 
@@ -804,7 +851,7 @@ export default function App() {
  </button>
  <h1 id="header-title" className="text-lg md:text-xl font-bold text-slate-800 truncate">{getPageTitle()}</h1>
  
- {getRoleBadge()}
+ 
 
  {currentTab === 'integrados' && (
  <div className="hidden sm:flex items-center gap-3 text-xs text-slate-600 ml-2 border-l border-slate-200 pl-4">
@@ -830,37 +877,9 @@ export default function App() {
  <div className="flex items-center gap-1 sm:gap-4 shrink-0">
  <div className="hidden lg:flex flex-col items-end justify-center mr-2">
  <span className="text-xs text-slate-500 font-medium whitespace-nowrap">Data: {new Date().toLocaleDateString('pt-BR')}</span>
- {lastSyncTime && (
- <span className="text-[10px] text-slate-400 whitespace-nowrap" title={`Sincronizado por: ${lastSyncUser && lastSyncUser !== 'offline' ? lastSyncUser : 'Você'}`}>
- Última sinc: {new Date(lastSyncTime).toLocaleDateString('pt-BR')} {new Date(lastSyncTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
- {lastSyncUser && lastSyncUser !== 'offline' && lastSyncUser !== 'Usuário logado' ? ` (${lastSyncUser.split('@')[0]})` : ''}
- </span>
- )}
  </div>
  
- <div className="flex items-center gap-1 sm:gap-2 mr-0 sm:mr-2">
- {isOnline ? (
- <button 
- onClick={handleForceSync}
- disabled={isSyncing}
- className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-full transition-colors border ${
-   syncRetryStatus 
-     ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100' 
-     : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200'
- }`}
- title={syncRetryStatus ? `Sincronizando: ${syncRetryStatus}` : "Sincronizar dados agora"}
- >
- <Wifi className="w-3.5 h-3.5" />
- <span className="hidden sm:inline">{syncRetryStatus || (isSyncing ? 'Sincronizando...' : 'Online')}</span>
- {isSyncing && <RefreshCw className="w-3 h-3 animate-spin ml-1" />}
- </button>
- ) : (
- <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-amber-50 text-amber-700 rounded-full border border-amber-200">
- <WifiOff className="w-3.5 h-3.5" />
- <span className="hidden sm:inline">Offline</span>
- </div>
- )}
- </div>
+
  
  <button 
  onClick={() => setIsDarkMode(!isDarkMode)} 
@@ -870,9 +889,22 @@ export default function App() {
  {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
  </button>
 
- <Notifications visits={visits} integrados={integrados} />
- <button onClick={handleLogout} className="text-slate-500 hover:text-slate-700 flex items-center gap-1 text-sm font-medium transition-colors" title="Sair">
- <LogOut className="w-5 h-5" />
+ {masterUserProfile && (
+              <button 
+                onClick={() => {
+                  setCurrentUserProfile(masterUserProfile);
+                  setMasterUserProfile(null);
+                }}
+                className="flex items-center gap-1 sm:gap-1.5 bg-purple-100 text-purple-800 text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-purple-300 hover:bg-purple-200 transition-colors mr-1 sm:mr-2"
+                title="Você está visualizando o sistema como outro usuário. Clique para retornar ao seu acesso."
+              >
+                <span>👑 Retornar ao Master</span>
+              </button>
+            )}
+            <Notifications visits={visits} integrados={integrados} />
+ <button onClick={handleLogout} className="text-slate-500 hover:text-slate-700 flex items-center gap-1 text-sm font-medium transition-colors bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg" title="Sair do Sistema">
+ <LogOut className="w-4 h-4" />
+ <span className="hidden sm:inline text-xs font-semibold">Sair</span>
  </button>
  </div>
  </header>

@@ -19,9 +19,12 @@ interface Props {
   animaisVivos: number;
   tipoLote: 'Misto' | 'Fêmea' | 'Macho';
   alojamentoDate?: string;
+  pesoAmostradoKg?: number;
+  onPesoChange?: (peso: number | undefined) => void;
+  pesoEstimadoBase?: number;
 }
 
-export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVivos, tipoLote, alojamentoDate }: Props) {
+export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVivos, tipoLote, alojamentoDate, pesoAmostradoKg, onPesoChange, pesoEstimadoBase }: Props) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const [memory, setMemory] = useState<MedicationMemory[]>([]);
@@ -67,24 +70,52 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
     }
   }, [tratamentos, memory]);
 
-  const [manualWeight, setManualWeight] = useState<number | ''>('');
+  const [localWeightStr, setLocalWeightStr] = useState<string>(() => {
+    if (pesoAmostradoKg !== undefined && Number(pesoAmostradoKg) > 0) return String(pesoAmostradoKg);
+    const tratWeight = tratamentos.find(t => t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)?.pesoEstimadoKg;
+    if (tratWeight) return String(tratWeight);
+    return '';
+  });
 
-  // Find expected weight based on age and curve
-  const { curve } = getActiveCurve(alojamentoDate, 'Em andamento', tipoLote);
-  const expectedWeightPoint = curve.find((p: GrowthCurvePoint) => p.dia >= (idade || 0));
-  const pesoEstimadoCurve = expectedWeightPoint ? expectedWeightPoint.pesoInicial : 0;
-  const effectiveWeight = manualWeight !== '' ? Number(manualWeight) : pesoEstimadoCurve;
+  useEffect(() => {
+    if (pesoAmostradoKg !== undefined && Number(pesoAmostradoKg) > 0) {
+      if (parseFloat(localWeightStr) !== pesoAmostradoKg) {
+        setLocalWeightStr(String(pesoAmostradoKg));
+      }
+    } else {
+      const tratWeight = tratamentos.find(t => t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)?.pesoEstimadoKg;
+      if (tratWeight && parseFloat(localWeightStr) !== tratWeight) {
+        setLocalWeightStr(String(tratWeight));
+      }
+    }
+  }, [pesoAmostradoKg, tratamentos]);
+
+  // Use provided base estimated weight or fallback to curve
+  let pesoEstimadoCurve = pesoEstimadoBase || 0;
+  if (!pesoEstimadoCurve) {
+    const { curve } = getActiveCurve(alojamentoDate, 'Em andamento', tipoLote);
+    const expectedWeightPoint = curve.find((p: GrowthCurvePoint) => p.dia >= (idade || 0));
+    pesoEstimadoCurve = expectedWeightPoint ? expectedWeightPoint.pesoInicial : 0;
+  }
+  
+  const savedTreatmentWeight = tratamentos.find(t => t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)?.pesoEstimadoKg;
+  const effectiveWeight = (pesoAmostradoKg !== undefined && Number(pesoAmostradoKg) > 0)
+    ? Number(pesoAmostradoKg)
+    : (savedTreatmentWeight || (pesoEstimadoCurve > 0 ? pesoEstimadoCurve : 0));
 
   const handleWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    setManualWeight(val === '' ? '' : parseFloat(val));
-    const newWeight = val === '' ? pesoEstimadoCurve : parseFloat(val);
+    setLocalWeightStr(val);
+    const newWeight = val === '' ? undefined : parseFloat(val);
+    if (onPesoChange && !isNaN(newWeight as number)) onPesoChange(newWeight);
+    else if (onPesoChange && val === '') onPesoChange(undefined);
+    const effectiveNewWeight = !isNaN(newWeight as number) && newWeight !== undefined && newWeight > 0 ? newWeight : (pesoEstimadoCurve > 0 ? pesoEstimadoCurve : 0);
     
     // Recalculate all treatments with the new weight
     if (tratamentos.length > 0) {
       const updated = tratamentos.map(t => {
-        if (!t.doseMgKg) return t;
-        let mgPorDia = t.doseMgKg * newWeight * animaisVivos;
+        if (!t.doseMgKg) return { ...t, pesoEstimadoKg: effectiveNewWeight > 0 ? effectiveNewWeight : undefined };
+        let mgPorDia = t.doseMgKg * effectiveNewWeight * animaisVivos;
         let produtoPorDia = mgPorDia;
         if (t.concentracao && t.concentracao > 0) {
           produtoPorDia = mgPorDia / (t.concentracao / 100);
@@ -93,7 +124,8 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
         return {
           ...t,
           quantidadePorDia: Number(gramasPorDia.toFixed(2)),
-          quantidadeTotal: t.duracaoDias ? Number((gramasPorDia * t.duracaoDias).toFixed(2)) : 0
+          quantidadeTotal: t.duracaoDias ? Number((gramasPorDia * t.duracaoDias).toFixed(2)) : 0,
+          pesoEstimadoKg: effectiveNewWeight > 0 ? effectiveNewWeight : undefined
         };
       });
       onChange(updated);
@@ -108,6 +140,7 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
         produto: '',
         doseMgKg: 0,
         duracaoDias: 0,
+        pesoEstimadoKg: effectiveWeight > 0 ? effectiveWeight : undefined
       }
     ]);
   };
@@ -126,6 +159,10 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
         if (!updatedItem.carenciaDias && mem.carenciaDias) updatedItem.carenciaDias = mem.carenciaDias;
       }
     }
+
+    if (effectiveWeight > 0) {
+      updatedItem.pesoEstimadoKg = effectiveWeight;
+    }
     
     newTratamentos[index] = updatedItem;
     
@@ -137,11 +174,8 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
       let mgPorDia = t.doseMgKg * effectiveWeight * animaisVivos;
       
       // If concentration is provided (e.g. mg/ml or g/100g -> mg/g), we can adjust, but usually concentration is % or mg/g
-      // Let's assume user inputs concentration as needed, or we just calculate active principle if no concentration.
-      // Usually Dose is mg active / kg. If concentration is e.g. 50% (500mg/g), we divide by concentration to get product amount.
       let produtoPorDia = mgPorDia;
       if (t.concentracao && t.concentracao > 0) {
-        // Assuming concentration is in percentage (e.g., 50 for 50%) -> / (50/100) = / 0.5
         produtoPorDia = mgPorDia / (t.concentracao / 100);
       }
       
@@ -164,6 +198,14 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
     newTratamentos.splice(index, 1);
     onChange(newTratamentos);
   };
+
+  const displayWeightValue = localWeightStr !== ''
+    ? localWeightStr
+    : ((pesoAmostradoKg !== undefined && Number(pesoAmostradoKg) > 0)
+        ? String(pesoAmostradoKg)
+        : (savedTreatmentWeight
+            ? String(savedTreatmentWeight)
+            : (pesoEstimadoCurve > 0 ? pesoEstimadoCurve.toFixed(2) : '')));
 
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden bg-white mt-4">
@@ -192,7 +234,7 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
               <input 
                 type="number" 
                 step="0.01" 
-                value={manualWeight === '' && pesoEstimadoCurve > 0 ? pesoEstimadoCurve.toFixed(2) : manualWeight}
+                value={displayWeightValue}
                 onChange={handleWeightChange}
                 className="w-16 px-1 py-0.5 text-slate-700 font-semibold bg-white border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 outline-none"
               />

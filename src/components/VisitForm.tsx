@@ -1,6 +1,6 @@
 import { safeStorage } from "../lib/safeStorage";
 import React, { useState } from 'react';
-import { Visit, Integrado, isVisitForIntegrado } from '../types';
+import { Visit, Integrado, Empresa, isVisitForIntegrado } from '../types';
 import { growthCurve, growthCurveFemea, getExpectedConsumption, getExpectedWeight, defaultMetas, defaultMetasFemea, getActiveCurve } from '../data';
 import { Info } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
@@ -8,20 +8,25 @@ import { TratamentosFormSection } from './TratamentosFormSection';
 
 interface VisitaFormProps {
  integrados: Integrado[];
+ empresas?: Empresa[];
  visits?: Visit[];
  initialData?: Visit;
  isNewLote?: boolean;
- onSave: (visit: Visit, integradoNome?: string, alojamentoDate?: string) => void;
+ onSave: (visit: Visit, integradoNome?: string, alojamentoDate?: string, empresaId?: string) => void;
  onCancel?: () => void;
 }
 
-export function VisitaForm({ integrados, visits = [], initialData, isNewLote, onSave, onCancel }: VisitaFormProps) {
- const [formData, setFormData] = useState<Partial<Visit> & { alojamentoDate?: string, integradoNome?: string }>(() => {
+export function VisitaForm({ integrados, empresas = [], visits = [], initialData, isNewLote, onSave, onCancel }: VisitaFormProps) {
+ const [formData, setFormData] = useState<Partial<Visit> & { alojamentoDate?: string, integradoNome?: string, empresaId?: string }>(() => {
  if (initialData) {
  const integrado = integrados.find(i => i.id === initialData.integradoId);
  const { metas } = getActiveCurve(integrado?.alojamentoDate, integrado?.status, initialData.tipoLote || 'Misto', integrado?.fechamentoDate);
+ const initialPesoAmostrado = (initialData.pesoAmostradoKg !== undefined && Number(initialData.pesoAmostradoKg) > 0)
+   ? Number(initialData.pesoAmostradoKg)
+   : (initialData.tratamentos?.find(t => t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)?.pesoEstimadoKg);
  return {
  ...initialData,
+ pesoAmostradoKg: initialPesoAmostrado,
  tipoLote: initialData.tipoLote || 'Misto',
  metaAlojamento: initialData.metaAlojamento ?? metas.metaAlojamento,
  metaCrescimento1: initialData.metaCrescimento1 ?? metas.metaCrescimento1,
@@ -31,7 +36,8 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  metaTerminacao2: initialData.metaTerminacao2 ?? metas.metaTerminacao2,
  metaAcumulada: initialData.metaAcumulada ?? metas.metaAcumulada,
  alojamentoDate: integrado?.alojamentoDate,
- integradoNome: integrado?.name
+ integradoNome: integrado?.name,
+ empresaId: integrado?.empresaId
  };
  }
  return {
@@ -39,7 +45,8 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  date: new Date().toISOString().split('T')[0],
  comedouro: 'Linear',
  tipoLote: 'Misto',
- colaborador: 'Wagner'
+ colaborador: 'Wagner',
+ empresaId: empresas?.length === 1 ? empresas[0].id : undefined
  };
  });
 
@@ -56,19 +63,21 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  e.preventDefault();
  if (saving) return;
  setSaving(true);
- const { alojamentoDate, integradoNome, ...visitData } = formData;
+ const { alojamentoDate, integradoNome, empresaId, ...visitData } = formData;
  let targetIntegradoId = initialData?.integradoId;
  if (!targetIntegradoId) {
    const matchExact = integrados.find(i => 
      (i.name || '').trim().toLowerCase() === (integradoNome || '').trim().toLowerCase() && 
-     (!alojamentoDate || i.alojamentoDate === alojamentoDate)
+     (!alojamentoDate || i.alojamentoDate === alojamentoDate) &&
+     (!empresaId || i.empresaId === empresaId)
    );
    if (matchExact) {
      targetIntegradoId = matchExact.id;
    } else {
      const matchName = integrados.find(i => 
        (i.name || '').trim().toLowerCase() === (integradoNome || '').trim().toLowerCase() && 
-       i.status === 'Em andamento'
+       i.status === 'Em andamento' &&
+       (!empresaId || i.empresaId === empresaId)
      );
      if (matchName) {
        targetIntegradoId = matchName.id;
@@ -91,11 +100,25 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  animaisMortos: visitData.animaisMortos !== undefined && visitData.animaisMortos !== null && String(visitData.animaisMortos).trim() !== '' ? Number(visitData.animaisMortos) : undefined,
  descartesPeriodo: visitData.descartesPeriodo !== undefined && visitData.descartesPeriodo !== null && String(visitData.descartesPeriodo).trim() !== '' ? Number(visitData.descartesPeriodo) : undefined,
  sobraSiloKg: visitData.sobraSiloKg !== undefined && visitData.sobraSiloKg !== null && String(visitData.sobraSiloKg).trim() !== '' ? Number(visitData.sobraSiloKg) : undefined,
- pesoAmostradoKg: visitData.pesoAmostradoKg !== undefined && visitData.pesoAmostradoKg !== null && String(visitData.pesoAmostradoKg).trim() !== '' ? Number(visitData.pesoAmostradoKg) : undefined,
+ pesoAmostradoKg: (() => {
+   const p = visitData.pesoAmostradoKg;
+   if (p !== undefined && p !== null && String(p).trim() !== '' && Number(p) > 0) {
+     return Number(p);
+   }
+   const tPeso = visitData.tratamentos?.find(t => t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)?.pesoEstimadoKg;
+   if (tPeso && Number(tPeso) > 0) return Number(tPeso);
+   return undefined;
+ })(),
+ tratamentos: (visitData.tratamentos || []).map(t => ({
+   ...t,
+   pesoEstimadoKg: (t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)
+     ? Number(t.pesoEstimadoKg)
+     : (visitData.pesoAmostradoKg && Number(visitData.pesoAmostradoKg) > 0 ? Number(visitData.pesoAmostradoKg) : undefined)
+ })),
  volumeTotalCargas: visitData.volumeTotalCargas !== undefined && visitData.volumeTotalCargas !== null && String(visitData.volumeTotalCargas).trim() !== '' ? Number(visitData.volumeTotalCargas) : undefined,
  pesoAloj: visitData.pesoAloj !== undefined && visitData.pesoAloj !== null && String(visitData.pesoAloj).trim() !== '' ? Number(visitData.pesoAloj) : undefined,
  pontuacaoSanitaria: visitData.pontuacaoSanitaria !== undefined && visitData.pontuacaoSanitaria !== null && String(visitData.pontuacaoSanitaria).trim() !== '' ? Number(visitData.pontuacaoSanitaria) : undefined,
- } as Visit, integradoNome, alojamentoDate);
+ } as Visit, integradoNome, alojamentoDate, empresaId);
  };
 
  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -135,6 +158,9 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  }
 
  if (integrado) {
+ if (integrado.empresaId && name === 'integradoNome') {
+ updates.empresaId = integrado.empresaId;
+ }
  if (!isNewLote) {
  if (name === 'integradoNome') {
  updates.alojamentoDate = integrado.alojamentoDate;
@@ -197,12 +223,10 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  }
 
  const currentVolumeTotal = Number(newData.volumeTotalCargas) || sumCargas;
- const sobraSilo = Number(newData.sobraSiloKg) || 0;
- const volumeSubtracted = currentVolumeTotal - sobraSilo;
  
- if (name.startsWith('carga') || name === 'volumeTotalCargas' || name === 'animaisAlojados' || name === 'animaisMortos' || name === 'descartesPeriodo' || name === 'sobraSiloKg') {
-    if (volumeSubtracted > 0 && vivos > 0) {
-        newData.consumoAcumuladoReal = Number((volumeSubtracted / vivos).toFixed(2));
+ if (name.startsWith('carga') || name === 'volumeTotalCargas' || name === 'animaisAlojados' || name === 'animaisMortos' || name === 'descartesPeriodo') {
+    if (currentVolumeTotal > 0 && vivos > 0) {
+        newData.consumoAcumuladoReal = Number((currentVolumeTotal / vivos).toFixed(2));
     } else if (name.startsWith('carga')) {
         newData.consumoAcumuladoReal = undefined;
     }
@@ -307,6 +331,24 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  />
  </div>
 
+ {(!initialData) && (
+   <div className="space-y-2 md:col-span-2">
+     <label className="block text-xs font-semibold text-slate-500 mb-1">Cliente (Empresa) <span className="text-red-500">*</span></label>
+     <select
+       name="empresaId"
+       required
+       value={formData.empresaId || ''}
+       onChange={handleChange}
+       className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+     >
+       <option value="">Selecione o Cliente</option>
+       {empresas?.filter(e => e.ativo).map(emp => (
+         <option key={emp.id} value={emp.id}>{emp.nome}</option>
+       ))}
+     </select>
+   </div>
+ )}
+
  <div className="space-y-2 md:col-span-2">
  <label className="block text-xs font-semibold text-slate-500 mb-1">Integrado (Nome)</label>
  <input 
@@ -320,7 +362,7 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
  />
  <datalist id="integrados-list">
- {Array.from(new Set(integrados.filter(i => isNewLote ? true : i.status === 'Em andamento').map(i => i.name))).map(name => (
+ {Array.from(new Set(integrados.filter(i => (isNewLote ? true : i.status === 'Em andamento') && (!formData.empresaId || i.empresaId === formData.empresaId)).map(i => i.name))).map(name => (
  <option key={name} value={name} />
  ))}
  </datalist>
@@ -489,38 +531,19 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
  />
  </div>
- <div className="space-y-2">
- <label className="block text-xs font-semibold text-slate-500 mb-1">Peso Amostrado (kg)</label>
- <input
-  type="number"
-  step="0.01"
-  name="pesoAmostradoKg"
-  value={formData.pesoAmostradoKg ?? ''}
-  onChange={handleChange}
-  placeholder="Ex: 85.5"
-  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
- />
- </div>
- <div className="space-y-2">
- <label className="block text-xs font-semibold text-slate-500 mb-1">Sobra no Silo (kg)</label>
- <input
-  type="number"
-  name="sobraSiloKg"
-  value={formData.sobraSiloKg ?? ''}
-  onChange={handleChange}
-  placeholder="Ao encerrar"
-  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
- />
- </div>
+
  </div>
 
  <TratamentosFormSection 
+ pesoAmostradoKg={formData.pesoAmostradoKg !== undefined && String(formData.pesoAmostradoKg) !== '' ? Number(formData.pesoAmostradoKg) : undefined}
+ onPesoChange={(peso) => setFormData(prev => ({ ...prev, pesoAmostradoKg: peso !== undefined ? peso : undefined }))}
  tratamentos={formData.tratamentos || []}
  onChange={(tratamentos) => setFormData(prev => ({ ...prev, tratamentos }))}
  idade={Number(formData.idade) || 0}
  animaisVivos={(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0) - (Number(formData.descartesPeriodo) || 0)}
  tipoLote={formData.tipoLote as any || 'Misto'}
  alojamentoDate={formData.alojamentoDate}
+ pesoEstimadoBase={expectedWeight || 0}
  />
 
  <div className="space-y-4 pt-4 border-t border-slate-100">
@@ -528,11 +551,10 @@ export function VisitaForm({ integrados, visits = [], initialData, isNewLote, on
  <label className="block text-xs font-semibold text-slate-500 mb-1">Recomendações e Observações do Lote</label>
  <textarea 
  name="recomendacao"
- required
  rows={3}
  value={formData.recomendacao || ''}
  onChange={handleChange}
- placeholder="Ex: Lote com consumo abaixo da tabela..."
+ placeholder="Ex: Regular altura das chupetas; Aumentar ventilação..."
  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
  />
  </div>

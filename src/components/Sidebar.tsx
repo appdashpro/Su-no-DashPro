@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Activity, Users, ClipboardList, LineChart, AlertCircle, HelpCircle, Shield, LogOut, ShieldCheck } from 'lucide-react';
+import { Home, Activity, Users, ClipboardList, LineChart, AlertCircle, HelpCircle, Shield, ShieldCheck, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { UserProfile, getRoleLabel } from '../types';
 
@@ -9,9 +9,13 @@ interface SidebarProps {
   onStartTutorial?: () => void;
   userProfile?: UserProfile | null;
   onLogout?: () => void;
+  lastSyncTime?: string | null;
+  isOnline?: boolean;
+  isSyncing?: boolean;
+  onForceSync?: () => void;
 }
 
-export function Sidebar({ currentTab, setCurrentTab, onStartTutorial, userProfile, onLogout }: SidebarProps) {
+export function Sidebar({ currentTab, setCurrentTab, onStartTutorial, userProfile, onLogout, lastSyncTime, isOnline, isSyncing, onForceSync }: SidebarProps) {
   const isMaster = userProfile?.papel === 'MASTER' || userProfile?.papel === 'SUPER_ADMIN';
   const isNutron = userProfile?.papel === 'TECNICO_NUTRON' || userProfile?.papel === 'COORDENADOR';
   const isClientTech = userProfile?.papel === 'TECNICO_CLIENTE' || userProfile?.papel === 'TECNICO';
@@ -34,7 +38,7 @@ export function Sidebar({ currentTab, setCurrentTab, onStartTutorial, userProfil
   };
 
   return (
-    <aside className="w-64 bg-[#0F172A] flex flex-col min-h-screen shrink-0 border-r border-slate-800">
+    <aside className="w-64 bg-[#0F172A] flex flex-col h-full shrink-0 border-r border-slate-800">
       <div className="p-5 pb-3">
         <div className="flex items-center gap-2.5 mb-5">
           <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white shadow-md shadow-blue-500/20">
@@ -48,23 +52,28 @@ export function Sidebar({ currentTab, setCurrentTab, onStartTutorial, userProfil
 
         {/* User Profile Card & RBAC Badge */}
         {userProfile && (
-          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-2.5 mb-2">
-            <div className="flex items-center justify-between gap-1 mb-1">
-              <span className="text-xs font-semibold text-slate-200 truncate" title={userProfile.nome}>
-                {userProfile.nome}
-              </span>
-              <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider", getBadgeStyle())}>
-                {userProfile.papel === 'MASTER' ? 'Master' : userProfile.papel === 'TECNICO_NUTRON' ? 'Téc. Nutron' : 'Téc. Cliente'}
-              </span>
+          <div className="px-1 mt-4 mb-1">
+            <div className="flex flex-col justify-center gap-0.5">
+              <span className="text-[9px] font-medium text-slate-500 uppercase tracking-wider pl-1">Usuário Logado</span>
+              <div className="flex items-center justify-between gap-1 pl-1">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMaster ? 'bg-purple-400' : isNutron ? 'bg-blue-400' : 'bg-emerald-400'}`}></div>
+                  <span className="text-xs font-semibold text-slate-300 truncate" title={userProfile.papel === 'TECNICO_CLIENTE' || userProfile.papel === 'TECNICO' ? (/^t[é|e]cnico\s+/i.test(userProfile.nome) ? userProfile.nome : `Técnico ${userProfile.nome}`) : userProfile.nome}>
+                    {userProfile.papel === 'TECNICO_CLIENTE' || userProfile.papel === 'TECNICO' ? (/^t[é|e]cnico\s+/i.test(userProfile.nome) ? userProfile.nome : `Técnico ${userProfile.nome}`) : userProfile.nome}
+                  </span>
+                </div>
+                {(userProfile.papel === 'MASTER' || userProfile.papel === 'TECNICO_NUTRON' || userProfile.papel === 'COORDENADOR') && (
+                  <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider opacity-90 shrink-0", getBadgeStyle())}>
+                    {userProfile.papel === 'MASTER' ? 'Master' : 'Nutron'}
+                  </span>
+                )}
+              </div>
             </div>
-            <p className="text-[11px] text-slate-400 truncate" title={userProfile.email}>
-              {userProfile.email}
-            </p>
           </div>
         )}
       </div>
 
-      <nav className="flex-1 space-y-1 px-2 py-2">
+      <nav className="flex-1 space-y-1 px-2 py-2 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-800/40 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-700/60">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
@@ -87,27 +96,40 @@ export function Sidebar({ currentTab, setCurrentTab, onStartTutorial, userProfil
         })}
       </nav>
 
-      <div className="p-4 border-t border-slate-800/80 mt-auto space-y-2">
-        {onStartTutorial && (
-          <button
-            id="sidebar-item-tutorial"
-            onClick={onStartTutorial}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 transition-all active:scale-95 shadow-sm"
-            title="Iniciar Tutorial Guiado"
-          >
-            <HelpCircle className="w-4 h-4 text-blue-400" />
-            <span>Tutorial Guiado</span>
-          </button>
-        )}
+      <div className="px-3 py-4 border-t border-slate-800/80 mt-auto">
+        <div className="flex gap-2 mb-3">
+          {onForceSync && (
+            <button
+              onClick={onForceSync}
+              disabled={!isOnline || isSyncing}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11px] font-medium border transition-colors ${
+                isOnline 
+                  ? 'bg-emerald-950/30 border-emerald-800/50 text-emerald-400 hover:bg-emerald-900/40' 
+                  : 'bg-slate-800/30 border-slate-700/50 text-slate-500 cursor-not-allowed'
+              }`}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isOnline ? (isSyncing ? '...' : 'Sincronizar') : 'Offline'}</span>
+            </button>
+          )}
 
-        {onLogout && (
-          <button
-            onClick={onLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sair do Sistema</span>
-          </button>
+          {onStartTutorial && (
+            <button
+              id="sidebar-item-tutorial"
+              onClick={onStartTutorial}
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11px] font-medium bg-blue-950/30 border border-blue-800/50 text-blue-300 hover:bg-blue-900/40 transition-colors"
+              title="Iniciar Tutorial Guiado"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>Tutorial</span>
+            </button>
+          )}
+        </div>
+
+        {lastSyncTime && (
+          <div className="text-center text-[10px] text-slate-500/80 font-medium">
+            Sinc: {new Date(lastSyncTime).toLocaleDateString('pt-BR')} {new Date(lastSyncTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+          </div>
         )}
       </div>
     </aside>

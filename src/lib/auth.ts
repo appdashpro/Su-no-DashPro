@@ -235,48 +235,77 @@ export async function saveUserWithPermissions(
       integrado_padrao_id: user.papel === 'TECNICO_CLIENTE' && allowedIntegradoIds.length > 0 ? allowedIntegradoIds[0] : user.integrado_padrao_id
     };
 
-    let resolvedAuthUid = user.auth_uid;
+    let resolvedAuthUid: string | undefined = user.auth_uid;
     let authCreated = false;
     let authErrorMsg: string | undefined = undefined;
 
-    // 2. If password provided, attempt to register user in Supabase Auth
-    if (password && password.trim().length >= 6 && typeof navigator !== 'undefined' && navigator.onLine) {
-      try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cnemtndccfppibecjuep.supabase.co';
-        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_DhXoLwRfFz1txE63iFDdUg_TivovFvj';
+    const existingIdx = currentList.findIndex(u => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
+    const isExistingUser = existingIdx >= 0 || !!user.auth_uid;
+    const targetAuthUid = user.auth_uid || (existingIdx >= 0 ? currentList[existingIdx].auth_uid : null);
+
+    // 2. Auth handling (creation or update)
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      let rpcExecutedSuccessfully = false;
+      
+      if (isExistingUser && (password || user.email)) {
+        const oldEmail = existingIdx >= 0 ? currentList[existingIdx].email.toLowerCase().trim() : user.email.toLowerCase().trim();
         
-        // Headless client without localStorage persistence to avoid replacing active Admin session
-        const tempAuthClient = createClient(supabaseUrl, supabaseKey, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-            detectSessionInUrl: false
-          }
+        // UPDATE EXISTING USER via RPC
+        const { data: rpcSuccess, error: rpcError } = await supabase.rpc('admin_update_user_credentials', {
+          target_old_email: oldEmail,
+          new_email: user.email.toLowerCase().trim(),
+          new_password: password && password.trim().length >= 6 ? password.trim() : null
         });
-
-        const { data: signUpData, error: signUpError } = await tempAuthClient.auth.signUp({
-          email: user.email.toLowerCase().trim(),
-          password: password.trim()
-        });
-
-        if (signUpError) {
-          if (signUpError.message?.includes('Signups not allowed') || (signUpError as any).code === 'signup_disabled') {
-            authErrorMsg = 'signup_disabled';
-          } else if (signUpError.message?.includes('already registered') || signUpError.message?.includes('already exists')) {
-            authErrorMsg = 'already_exists';
+        
+        if (rpcError) {
+          if (rpcError.message?.includes('function') && rpcError.message?.includes('does not exist')) {
+            authErrorMsg = 'rpc_missing';
+            rpcExecutedSuccessfully = true; // We don't want to fallback to signup if RPC is missing, we want to show the modal
           } else {
-            authErrorMsg = signUpError.message;
+            authErrorMsg = rpcError.message;
+            rpcExecutedSuccessfully = true;
           }
-        } else if (signUpData?.user) {
-          resolvedAuthUid = signUpData.user.id;
-          authCreated = true;
+        } else if (rpcSuccess === true) {
+          authCreated = true; // Use this flag to indicate auth success
+          resolvedAuthUid = targetAuthUid || undefined;
+          rpcExecutedSuccessfully = true;
         }
-      } catch (authErr: any) {
-        console.warn('Could not auto-register Supabase auth user:', authErr);
+        // If rpcSuccess === false, the user wasn't found in auth.users. We will let it fallback to signUp.
+      }
+      
+      if (!rpcExecutedSuccessfully && password && password.trim().length >= 6) {
+        // CREATE NEW USER via signUp
+        try {
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cnemtndccfppibecjuep.supabase.co';
+          const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_DhXoLwRfFz1txE63iFDdUg_TivovFvj';
+          
+          const tempAuthClient = createClient(supabaseUrl, supabaseKey, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+          });
+
+          const { data: signUpData, error: signUpError } = await tempAuthClient.auth.signUp({
+            email: user.email.toLowerCase().trim(),
+            password: password.trim()
+          });
+          
+          if (signUpError) {
+            if (signUpError.message?.includes('Signups not allowed') || (signUpError as any).code === 'signup_disabled') {
+              authErrorMsg = 'signup_disabled';
+            } else if (signUpError.message?.includes('already registered') || signUpError.message?.includes('already exists')) {
+              authErrorMsg = 'already_exists';
+            } else {
+              authErrorMsg = signUpError.message;
+            }
+          } else if (signUpData?.user) {
+            resolvedAuthUid = signUpData.user.id;
+            authCreated = true;
+          }
+        } catch (authErr: any) {
+          console.warn('Could not auto-register Supabase auth user:', authErr);
+        }
       }
     }
 
-    const existingIdx = currentList.findIndex(u => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
     if (existingIdx >= 0) {
       currentList[existingIdx] = { ...updatedUser, auth_uid: resolvedAuthUid || currentList[existingIdx].auth_uid };
     } else {
@@ -288,17 +317,25 @@ export async function saveUserWithPermissions(
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       const emailNorm = user.email.toLowerCase().trim();
       
-      // Check if user exists by email
-      const { data: existingDbUser, error: selErr } = await supabase
-        .from('usuarios')
-        .select('id, auth_uid')
-        .eq('email', emailNorm)
-        .maybeSingle();
+      const validDbId = user.id && !user.id.startsWith('usr_') ? user.id : null;
 
-      if (selErr) throw selErr;
+      // 1. Determine existing user to preserve auth_uid if needed
+      let existingAuthUid = null;
+      let existingIdToUpdate = validDbId;
+
+      if (validDbId) {
+        const { data: byId } = await supabase.from('usuarios').select('id, auth_uid').eq('id', validDbId).maybeSingle();
+        if (byId) existingAuthUid = byId.auth_uid;
+      } else {
+        const { data: byEmail } = await supabase.from('usuarios').select('id, auth_uid').eq('email', emailNorm).maybeSingle();
+        if (byEmail) {
+          existingAuthUid = byEmail.auth_uid;
+          existingIdToUpdate = byEmail.id;
+        }
+      }
 
       const userPayload = {
-        auth_uid: resolvedAuthUid || user.auth_uid || (existingDbUser ? existingDbUser.auth_uid : null) || crypto.randomUUID(),
+        auth_uid: resolvedAuthUid || user.auth_uid || existingAuthUid || crypto.randomUUID(),
         email: emailNorm,
         nome: user.nome,
         papel: user.papel,
@@ -309,20 +346,22 @@ export async function saveUserWithPermissions(
         updated_at: new Date().toISOString()
       };
 
-      if (existingDbUser) {
-        const { error: updErr } = await supabase
-          .from('usuarios')
-          .update(userPayload)
-          .eq('id', existingDbUser.id);
-        if (updErr) throw updErr;
-      } else {
-        const { error: insErr } = await supabase
-          .from('usuarios')
-          .insert({
-            id: user.id && !user.id.startsWith('usr_') ? user.id : undefined,
-            ...userPayload
-          });
-        if (insErr) throw insErr;
+      const { error: upsertErr } = await supabase
+        .from('usuarios')
+        .upsert({
+          id: existingIdToUpdate || undefined,
+          ...userPayload
+        }, { onConflict: 'id' });
+        
+      if (upsertErr) {
+        console.warn('Upsert failed, trying direct update/insert fallback', upsertErr);
+        if (existingIdToUpdate) {
+          const { error: updErr } = await supabase.from('usuarios').update(userPayload).eq('id', existingIdToUpdate);
+          if (updErr) throw updErr;
+        } else {
+          const { error: insErr } = await supabase.from('usuarios').insert(userPayload);
+          if (insErr) throw insErr;
+        }
       }
     }
     return { success: true, authError: authErrorMsg, authCreated };
@@ -370,14 +409,15 @@ export function filterIntegradosForUser(integrados: Integrado[], user: UserProfi
       const filtered = integrados.filter(i => 
         user.clientes_permitidos!.some(allowed => {
           if (!allowed) return false;
+          if (allowed === i.empresaId) return true;
           const allowedNorm = allowed.toLowerCase().trim();
           const nameNorm = i.name.toLowerCase().trim();
           return allowed === i.id || allowedNorm === nameNorm || nameNorm.includes(allowedNorm) || allowedNorm.includes(nameNorm);
         })
       );
-      if (filtered.length > 0) return filtered;
+      return filtered;
     }
-    return integrados;
+    return [];
   }
 
   // TECNICO_CLIENTE or TECNICO
@@ -386,6 +426,7 @@ export function filterIntegradosForUser(integrados: Integrado[], user: UserProfi
       const filtered = integrados.filter(i => 
         user.clientes_permitidos!.some(allowed => {
           if (!allowed) return false;
+          if (allowed === i.empresaId) return true;
           const allowedNorm = allowed.toLowerCase().trim();
           const nameNorm = i.name.toLowerCase().trim();
           return allowed === i.id || allowedNorm === nameNorm || nameNorm.includes(allowedNorm) || allowedNorm.includes(nameNorm);

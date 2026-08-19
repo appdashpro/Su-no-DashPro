@@ -248,6 +248,7 @@ export interface Tratamento {
   quantidadePorDia?: number;
   quantidadeTotal?: number;
   carenciaDias?: number;
+  pesoEstimadoKg?: number;
 }
 
 export interface Visit {

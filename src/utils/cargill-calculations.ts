@@ -48,11 +48,9 @@ export function calculateRealConsumption(visit: Partial<Visit>): number {
 
   const volumeTotal = calculateTotalFeedVolume(visit);
   const vivos = calculateAnimalsAlive(visit);
-  const sobraSilo = Number(visit.sobraSiloKg) || 0;
 
   if (volumeTotal > 0 && vivos > 0) {
-    const kgConsumidos = Math.max(0, volumeTotal - sobraSilo);
-    return Number((kgConsumidos / vivos).toFixed(2));
+    return Number((volumeTotal / vivos).toFixed(2));
   }
 
   return 0;

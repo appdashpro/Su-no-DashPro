@@ -1,8 +1,13 @@
 const fs = require('fs');
-let code = fs.readFileSync('src/components/VisitForm.tsx', 'utf-8');
+let file = 'src/components/VisitForm.tsx';
+let code = fs.readFileSync(file, 'utf8');
+
 code = code.replace(
-  "<Tooltip contentStyle",
-  "<Tooltip cursor={{ stroke: '#cbd5e1' }} contentStyle"
+  " <TratamentosFormSection ",
+  ` <TratamentosFormSection 
+ pesoAmostradoKg={formData.pesoAmostradoKg !== '' ? Number(formData.pesoAmostradoKg) : undefined}
+ onPesoChange={(peso) => setFormData(prev => ({ ...prev, pesoAmostradoKg: peso !== undefined ? String(peso) : '' }))}`
 );
-fs.writeFileSync('src/components/VisitForm.tsx', code);
-console.log('patched visitform');
+
+fs.writeFileSync(file, code);
+console.log("Patched VisitForm");

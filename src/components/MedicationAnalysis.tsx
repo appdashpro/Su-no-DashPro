@@ -5,7 +5,7 @@ import { TrendingUp, Syringe, AlertCircle, Search, Pill, Calendar, Download } fr
 import { format, subDays, subMonths, subYears, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, LabelList } from 'recharts';
 
 interface Props {
   visits: Visit[];
@@ -43,11 +43,11 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
       const integrado = integrados.find(i => i.id === visit.integradoId);
       if (!integrado) return;
 
-      let pesoEstimadoKg = visit.pesoAmostradoKg || 0;
-      if (pesoEstimadoKg <= 0) {
+      let basePesoEstimadoKg = visit.pesoAmostradoKg || 0;
+      if (basePesoEstimadoKg <= 0) {
         const { curve } = getActiveCurve(integrado.alojamentoDate || visit.date, 'Em andamento', visit.tipoLote || 'Misto');
         const expectedPoint = curve.find((p: GrowthCurvePoint) => p.dia >= (visit.idade || 0));
-        pesoEstimadoKg = expectedPoint ? expectedPoint.pesoInicial : 0;
+        basePesoEstimadoKg = expectedPoint ? expectedPoint.pesoInicial : 0;
       }
 
       const animaisTratados = Math.max(0, (visit.animaisAlojados || 0) - (visit.animaisMortos || 0));
@@ -55,12 +55,27 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
       visit.tratamentos.forEach(t => {
         if (!t.produto) return;
         
+        let pesoEstimadoKg = (t.pesoEstimadoKg !== undefined && t.pesoEstimadoKg !== null && Number(t.pesoEstimadoKg) > 0)
+          ? Number(t.pesoEstimadoKg)
+          : ((visit.pesoAmostradoKg && Number(visit.pesoAmostradoKg) > 0) ? Number(visit.pesoAmostradoKg) : basePesoEstimadoKg);
+        
         const concentracao = t.concentracao && t.concentracao > 0 ? t.concentracao : 100;
         const duracaoDias = t.duracaoDias || 1;
         const doseMgKg = t.doseMgKg || 0;
 
-        const mgTotalTratamento = animaisTratados * pesoEstimadoKg * doseMgKg * duracaoDias;
-        const produtoConsumidoKg = (mgTotalTratamento / 1000000) / (concentracao / 100);
+        let produtoConsumidoKg = 0;
+        let mgTotalTratamento = 0;
+        
+        if (t.quantidadeTotal && t.quantidadeTotal > 0) {
+          // quantidadeTotal is in grams
+          produtoConsumidoKg = t.quantidadeTotal / 1000;
+          mgTotalTratamento = produtoConsumidoKg * 1000000 * (concentracao / 100);
+          
+
+        } else {
+          mgTotalTratamento = animaisTratados * pesoEstimadoKg * doseMgKg * duracaoDias;
+          produtoConsumidoKg = (mgTotalTratamento / 1000000) / (concentracao / 100);
+        }
 
         data.push({
           id: t.id,
@@ -124,7 +139,7 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
     return Object.values(grouped)
       .sort((a, b) => a.key.localeCompare(b.key))
       .map(item => {
-        const formattedItem: any = { name: item.label };
+        const formattedItem: any = { name: item.label, total: Number(item.total.toFixed(2)) };
         Object.keys(item).forEach(k => {
           if (k !== 'key' && k !== 'label' && k !== 'total') {
             formattedItem[k] = Number(item[k].toFixed(2));
@@ -133,6 +148,46 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
         return formattedItem;
       });
   }, [periodFilteredData]);
+
+  const renderCustomBarLabel = (productKey: string) => (props: any) => {
+    const { x, y, width, height, index, payload } = props;
+    
+    // Obter o valor específico do produto/medicação para esta barra
+    const itemData = payload || (chartData && chartData[index]);
+    const medicationValue = itemData && itemData[productKey] !== undefined ? Number(itemData[productKey]) : 0;
+    
+    if (!medicationValue || isNaN(medicationValue) || medicationValue <= 0) return null;
+    // Ocultar se a fatia for muito pequena para renderizar o texto
+    if (height < 14 || width < 16) return null;
+
+    const total = itemData?.total || 0;
+    if (total <= 0) return null;
+
+    const percent = (medicationValue / total) * 100;
+    // Não exibir porcentagens menores que 3% para evitar poluição visual
+    if (percent < 3) return null;
+
+    const formattedPercent = percent >= 10 ? `${Math.round(percent)}%` : `${percent.toFixed(1)}%`;
+
+    return (
+      <text
+        x={x + width / 2}
+        y={y + height / 2}
+        fill="#ffffff"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={height < 22 || width < 28 ? 9 : 11}
+        fontWeight="bold"
+        style={{
+          pointerEvents: 'none',
+          textShadow: '0 1px 2px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.6)',
+          userSelect: 'none'
+        }}
+      >
+        {formattedPercent}
+      </text>
+    );
+  };
 
   const COLORS = [
     '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -285,7 +340,12 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
                 <RechartsTooltip 
                   cursor={{ fill: '#f1f5f9' }}
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: any, name: any) => [`${Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg`, name]}
+                  formatter={(value: any, name: any, item: any) => {
+                    const val = Number(value || 0);
+                    const total = item?.payload?.total || 0;
+                    const pct = total > 0 ? ` (${((val / total) * 100).toFixed(1)}%)` : '';
+                    return [`${val.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg${pct}`, name];
+                  }}
                 />
                 <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
                 {chartProducts.map((product, index) => (
@@ -295,7 +355,9 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
                     stackId="a" 
                     fill={COLORS[index % COLORS.length]} 
                     maxBarSize={50} 
-                  />
+                  >
+                    <LabelList content={renderCustomBarLabel(product)} />
+                  </Bar>
                 ))}
               </BarChart>
             </ResponsiveContainer>

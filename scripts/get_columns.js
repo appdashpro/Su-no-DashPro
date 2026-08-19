@@ -1,16 +1,22 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = 'https://rzjmviojwioezwffvcjq.supabase.co';
-const supabaseKey = 'sb_publishable_dgn-oKGNBmvLsJ3m4APBFQ_iJpImCZ6';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseUrl = 'https://cnemtndccfppibecjuep.supabase.co';
+const supabaseKey = 'sb_publishable_DhXoLwRfFz1txE63iFDdUg_TivovFvj';
 
 async function test() {
-  const response = await fetch(`${supabaseUrl}/rest/v1/registros?limit=1`, {
+  const table = process.argv[2]
+  const response = await fetch(`${supabaseUrl}/rest/v1/${table}?limit=1`, {
     headers: {
       'apikey': supabaseKey,
       'Authorization': `Bearer ${supabaseKey}`
     }
   })
-  console.log(await response.json())
+  
+  const data = await response.json();
+  if (data && data.length > 0) {
+      console.log(Object.keys(data[0]));
+  } else {
+      console.log("No data or error:", data);
+  }
 }
 test()

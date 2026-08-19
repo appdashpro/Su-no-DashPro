@@ -3,6 +3,7 @@ import { Visit, Integrado, isVisitForIntegrado } from '../types';
 import { getExpectedConsumption, getActiveCurve } from '../data';
 import { Search, ArrowUpDown, Download, Plus, Eye, X, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
+import { getSavedUserProfile } from '../lib/auth';
 
 interface VisitsListProps {
  pendingSyncIds?: string[];
@@ -24,6 +25,8 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  const [sortBy, setSortBy] = useState<SortOption>('date-desc');
  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
  const [internalSelected, setInternalSelected] = useState<string | null>(null);
+  const userProfile = getSavedUserProfile();
+  const isTecnicoCliente = userProfile?.papel === 'TECNICO_CLIENTE';
 
  const selectedIntegradoDetails = viewingIntegradoId !== undefined ? viewingIntegradoId : internalSelected;
  const setSelectedIntegradoDetails = (id: string | null) => {
@@ -118,7 +121,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <thead className="bg-slate-50 text-slate-700 font-semibold text-xs sticky top-0 z-20 shadow-sm">
  <tr>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Data</th>
- <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Cliente</th>
+ {!isTecnicoCliente && <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Cliente</th>}
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Integrado</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Alojamento</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Tipo Lote</th>
@@ -128,7 +131,6 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Descartes</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Mortalidade (%)</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Vol. Cargas (kg)</th>
- <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Sobra Silo (kg)</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Recomendação</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Consumo acumulado</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Comedouro</th>
@@ -153,7 +155,6 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Carga Term 2</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Meta Acum.</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Peso aloj</th>
- <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Peso Amostrado (kg)</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Pontuação Sanitária</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Tratamentos</th>
  <th className="px-2 py-2 border-b border-slate-200 w-[60px] sticky right-0 top-0 bg-slate-50 z-30 text-center">Ações</th>
@@ -195,8 +196,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
      return Number(v.consumoAcumuladoReal).toFixed(2);
    }
    if (volumeTotal > 0 && vivos > 0) {
-     const kgConsumidos = volumeTotal - (Number(v.sobraSiloKg) || 0);
-     return (kgConsumidos / vivos).toFixed(2);
+     return (volumeTotal / vivos).toFixed(2);
    }
    return '-';
  })();
@@ -213,7 +213,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <td className="px-2 py-2 whitespace-nowrap">{
  new Date(Number(v.date.split('-')[0]), Number(v.date.split('-')[1]) - 1, Number(v.date.split('-')[2])).toLocaleDateString('pt-BR')
  }</td>
- <td className="px-2 py-2 whitespace-nowrap text-slate-600">{integrado?.empresaName || '-'}</td>
+ {!isTecnicoCliente && <td className="px-2 py-2 whitespace-nowrap text-slate-600">{integrado?.empresaName || '-'}</td>}
  <td className={`px-2 py-2 font-medium ${pendingSyncIds?.includes(v.id) ? 'text-red-600 font-bold' : 'text-slate-800'}`} title={pendingSyncIds?.includes(v.id) ? "Aguardando sincronização com a nuvem" : ""}>{integrado?.name || 'Desconhecido'}</td>
  <td className="px-2 py-2 whitespace-nowrap text-slate-600">{integrado?.alojamentoDate ? new Date(Number(integrado.alojamentoDate.split('-')[0]), Number(integrado.alojamentoDate.split('-')[1]) - 1, Number(integrado.alojamentoDate.split('-')[2])).toLocaleDateString('pt-BR') : '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap"><span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">{v.tipoLote || 'Misto'}</span></td>
@@ -227,7 +227,6 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  : v.animaisAlojados && v.animaisMortos ? <span className="text-xs font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{((Number(v.animaisMortos)/Number(v.animaisAlojados))*100).toFixed(2)}%</span> : '-'}
  </td>
  <td className="px-2 py-2 whitespace-nowrap">{v.volumeTotalCargas ?? '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap">{v.sobraSiloKg ?? '-'}</td>
  <td className="px-2 py-2">
  <div className="text-xs leading-relaxed min-w-[300px] whitespace-pre-wrap" title={v.recomendacao}>
  {v.recomendacao ? (
@@ -265,7 +264,6 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <td className="px-2 py-2 whitespace-nowrap text-xs font-semibold">{(v.metaAcumulada || metas.metaAcumulada) ? Number(v.metaAcumulada || metas.metaAcumulada).toFixed(2) : '-'}</td>
  
  <td className="px-2 py-2 whitespace-nowrap text-xs">{v.pesoAloj ? Number(v.pesoAloj).toFixed(2) : '-'}</td>
- <td className="px-2 py-2 whitespace-nowrap text-xs">{v.pesoAmostradoKg ? Number(v.pesoAmostradoKg).toFixed(2) : '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap text-xs">{v.pontuacaoSanitaria ?? '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap text-xs">{v.tratamentos && v.tratamentos.length > 0 ? v.tratamentos.map(t => t.produto).join(', ') : '-'}</td>
  
