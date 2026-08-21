@@ -942,7 +942,11 @@ export const growthCurvesMisto: CurveVersion[] = [
   }
 ];
 
-export const getActiveCurve = (alojamentoDate?: string, status?: string, tipoLote?: string, fechamentoDate?: string) => {
+export const getActiveCurve = (alojamentoDate?: string, status?: string, tipoLote?: string, fechamentoDate?: string, empresaConfig?: any) => {
+  if (empresaConfig?.curva_desempenho && Array.isArray(empresaConfig.curva_desempenho) && empresaConfig.curva_desempenho.length > 0) {
+    return { curve: empresaConfig.curva_desempenho, metas: defaultMetas }; // Assuming default metas for now if not overridden
+  }
+
   if (tipoLote === 'Fêmea') return { curve: growthCurveFemea, metas: defaultMetasFemea };
   
   if (status === 'Em andamento') {
@@ -1057,14 +1061,27 @@ export const defaultMetasFemea = {
   metaAcumulada: 166.29
 };
 
-export const getExpectedPerformance = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string) => {
-  const { curve } = getActiveCurve(alojamentoDate, status, tipoLote, fechamentoDate);
+export const getExpectedPerformance = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string, empresaConfig?: any) => {
+  const { curve } = getActiveCurve(alojamentoDate, status, tipoLote, fechamentoDate, empresaConfig);
   
   let currentWeight = (pesoAloj && Number(pesoAloj) > 0) ? Number(pesoAloj) : curve[0].pesoInicial;
   let totalConsumo = 0;
   
+  // Calculate offset if tipo_calculo_curva is PESO_ALOJAMENTO
+  let offsetDays = 0;
+  if (empresaConfig?.tipo_calculo_curva === 'PESO_ALOJAMENTO' && pesoAloj && Number(pesoAloj) > 0) {
+    // Find the day in the curve where pesoInicial is closest to pesoAloj
+    // (Assuming curve is sorted by day)
+    for (let i = 0; i < curve.length; i++) {
+      if (curve[i].pesoInicial >= Number(pesoAloj)) {
+        offsetDays = i;
+        break;
+      }
+    }
+  }
+  
   for (let d = 0; d < idade; d++) {
-    let point = curve.find(p => p.dia === (d + 1));
+    let point = curve.find((p: any) => p.dia === (d + 1 + offsetDays));
     if (!point) {
       point = curve[curve.length - 1];
     }
@@ -1078,12 +1095,12 @@ export const getExpectedPerformance = (idade: number, tipoLote?: 'Misto' | 'Fêm
   };
 };
 
-export const getExpectedConsumption = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string): number => {
-  return getExpectedPerformance(idade, tipoLote, pesoAloj, alojamentoDate, status, fechamentoDate).expectedConsumption;
+export const getExpectedConsumption = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string, empresaConfig?: any): number => {
+  return getExpectedPerformance(idade, tipoLote, pesoAloj, alojamentoDate, status, fechamentoDate, empresaConfig).expectedConsumption;
 };
 
-export const getExpectedWeight = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string): number => {
-  return getExpectedPerformance(idade, tipoLote, pesoAloj, alojamentoDate, status, fechamentoDate).expectedWeight;
+export const getExpectedWeight = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string, empresaConfig?: any): number => {
+  return getExpectedPerformance(idade, tipoLote, pesoAloj, alojamentoDate, status, fechamentoDate, empresaConfig).expectedWeight;
 };
 
 // Parser
@@ -1172,4 +1189,62 @@ export const initialVisits: Visit[] = parsedVisits.length > 0 ? parsedVisits : [
     recomendacao: 'Consumo acumulado 49,83 kg e tabela 51,36 kg',
     comedouro: 'Automático', colaborador: 'Wagner', consumoAcumuladoReal: 49.83, mortalidade: 0.12
   }
+];
+
+export const DEFAULT_MEDICAMENTOS_PERMITIDOS: string[] = [
+  'Amoxicilina',
+  'Apramicina',
+  'Avilamicina',
+  'Ciprofloxacino',
+  'Ciromazina',
+  'Clortetraciclina',
+  'Colistina',
+  'Doxiciclina',
+  'Enramicina',
+  'Espectinomicina',
+  'Florfenicol',
+  'Fosfomicina',
+  'Gentamicina',
+  'Halquinol',
+  'Ivermectina',
+  'Leucomicina',
+  'Lincomicina',
+  'Neomicina',
+  'Norfloxacina',
+  'Oxibendazole',
+  'Oxitetraciclina',
+  'Sulfadiazina',
+  'Sulfadiazina + Trimetoprim',
+  'Sulfadimidina',
+  'Sulfametazina',
+  'Sulfametoxazol',
+  'Tiamulina',
+  'Tildipirosina',
+  'Tilmicosina',
+  'Tilosina',
+  'Tilvalosina',
+  'Trimetoprima',
+  'Tulatromicina',
+  'Valnemulina',
+  'Virginiamicina'
+];
+
+export const DEFAULT_CAUSAS_MORTALIDADE: string[] = [
+  'Pneumonia / doença respiratória',
+  'Úlcera gástrica / hemorragia gástrica',
+  'Diarreia / enterite',
+  'Circovirose / doença associada ao PCV2',
+  'Polisserosite',
+  'Septicemia / infecção sistêmica',
+  'Pericardite',
+  'Artrite / poliartrite',
+  'Meningite / encefalite / sinais neurológicos',
+  'Torção / volvo de órgãos',
+  'Trauma / lesões por briga ou manejo',
+  'Fratura / problema locomotor',
+  'Prolapso / hemorragia',
+  'Morte súbita — causa não identificada',
+  'Intoxicação / suspeita de intoxicação',
+  'Outros',
+  'Não diagnosticado'
 ];

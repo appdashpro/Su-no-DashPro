@@ -1,4 +1,5 @@
 import { safeStorage } from "../lib/safeStorage";
+import { getEmpresaConfigsLocal } from "../lib/storage";
 import React, { useState } from 'react';
 import { Visit, Integrado, Empresa, isVisitForIntegrado } from '../types';
 import { growthCurve, growthCurveFemea, getExpectedConsumption, getExpectedWeight, defaultMetas, defaultMetasFemea, getActiveCurve } from '../data';
@@ -51,6 +52,12 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  });
 
  const [saving, setSaving] = useState(false);
+
+ React.useEffect(() => {
+   if (!formData.empresaId && empresas && empresas.length === 1) {
+     setFormData(prev => ({ ...prev, empresaId: empresas[0].id }));
+   }
+ }, [empresas, formData.empresaId]);
 
  const [outrosColab, setOutrosColab] = useState(() => {
  if (!initialData || !initialData.colaborador) return '';
@@ -125,6 +132,22 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  const { name, value } = e.target;
  
  let updates: any = { [name]: value };
+
+ if (name === 'empresaId') {
+   if (formData.integradoNome) {
+     const belongsToEmpresa = integrados.some(i => 
+       (i.name || '').toLowerCase() === String(formData.integradoNome || '').toLowerCase() && 
+       (!i.empresaId || i.empresaId === value)
+     );
+     if (!belongsToEmpresa) {
+       updates.integradoNome = '';
+       updates.alojamentoDate = '';
+       ['animaisAlojados', 'animaisMortos', 'mortalidade', 'pesoAloj', 'pontuacaoSanitaria', 'cargaAlojamento', 'consumoAlojamento', 'cargaCrescimento1', 'consumoCrescimento1', 'cargaCrescimento2', 'consumoCrescimento2', 'cargaCrescimento3', 'consumoCrescimento3', 'cargaTerminacao1', 'consumoTerminacao1', 'cargaTerminacao2', 'consumoTerminacao2', 'volumeTotalCargas', 'consumoAcumuladoReal'].forEach(key => {
+         updates[key] = '';
+       });
+     }
+   }
+ }
  
  if (name === 'tipoLote' || name === 'alojamentoDate') {
  const activeTipo = name === 'tipoLote' ? value : formData.tipoLote;
@@ -253,9 +276,17 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  );
  const currentIntegradoId = matchingIntegrado?.id || initialData?.integradoId || `i_${(formData.integradoNome || '').replace(/\s+/g, '').toLowerCase()}_${(formData.alojamentoDate || '').replace(/[-/]/g, '')}`;
  const integrado = matchingIntegrado || integrados.find(i => i.id === currentIntegradoId);
- const currentIdade = Number(formData.idade) || 0;
- const expectedConsumption = currentIdade > 0 ? getExpectedConsumption(currentIdade, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate) : null;
- const expectedWeight = currentIdade > 0 ? getExpectedWeight(currentIdade, formData.tipoLote as any, formData.pesoAloj) : null;
+ const configs = getEmpresaConfigsLocal();
+  const currentConfig = configs.find((c: any) => c.empresa_id === (formData.empresaId || integrado?.empresaId));
+  const currentIdade = Number(formData.idade) || 0;
+ const expectedConsumption = currentIdade > 0 ? getExpectedConsumption(currentIdade, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig) : null;
+ const expectedWeight = currentIdade > 0 ? getExpectedWeight(currentIdade, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig) : null;
+
+  let racaoRecomendada = '';
+  if (currentConfig?.programa_alimentar && Array.isArray(currentConfig.programa_alimentar) && currentConfig.programa_alimentar.length > 0) {
+    const matchingPhase = currentConfig.programa_alimentar.find((p: any) => currentIdade >= Number(p.dia_inicio) && currentIdade <= Number(p.dia_fim));
+    if (matchingPhase) racaoRecomendada = matchingPhase.racao;
+  }
 
 
  const dynamicChartData = React.useMemo(() => {
@@ -331,7 +362,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  />
  </div>
 
- {(!initialData) && (
+ {(!initialData && empresas && empresas.length > 1) && (
    <div className="space-y-2 md:col-span-2">
      <label className="block text-xs font-semibold text-slate-500 mb-1">Cliente (Empresa) <span className="text-red-500">*</span></label>
      <select
@@ -342,8 +373,9 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
        className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
      >
        <option value="">Selecione o Cliente</option>
-       {empresas?.filter(e => e.ativo).map(emp => (
-         <option key={emp.id} value={emp.id}>{emp.nome}</option>
+      {console.log('Empresas no render:', empresas) as any}
+       {empresas?.filter(e => e.ativo !== false).map(emp => (
+         <option key={emp.id} value={emp.id}>{emp.nome || (emp as any).name || (emp as any).razao_social || 'Empresa Sem Nome'}</option>
        ))}
      </select>
    </div>
@@ -544,6 +576,8 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  tipoLote={formData.tipoLote as any || 'Misto'}
  alojamentoDate={formData.alojamentoDate}
  pesoEstimadoBase={expectedWeight || 0}
+          medicamentosPermitidos={currentConfig?.medicamentos_permitidos}
+          causasMortalidade={currentConfig?.causas_mortalidade}
  />
 
  <div className="space-y-4 pt-4 border-t border-slate-100">
@@ -559,7 +593,14 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  />
  </div>
 
- <h3 className="text-sm font-bold text-slate-700">Lançamento de Cargas e Consumo (kg)</h3>
+ <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
+  <h3 className="text-sm font-bold text-slate-700">Lançamento de Cargas e Consumo (kg)</h3>
+  {racaoRecomendada && (
+    <span className="px-3 py-1 bg-amber-50 text-amber-700 text-xs font-semibold rounded border border-amber-200">
+      💡 Ração Sugerida (Programa Alimentar): {racaoRecomendada}
+    </span>
+  )}
+</div>
  <div className="overflow-x-auto w-full -ml-2 -mr-2 md:mx-0 pr-4 md:pr-0">
  <table className="w-full text-sm text-left border-collapse min-w-[500px]">
  <thead>

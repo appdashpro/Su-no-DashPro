@@ -2,6 +2,18 @@
 // 1. MODELOS RELACIONAIS DO BANCO DE DADOS (SUPABASE V3)
 // ==============================================================================
 
+export interface EmpresaConfig {
+  empresa_id: string;
+  tipo_calculo_curva: 'DIA_UM' | 'PESO_ALOJAMENTO';
+  meta_mortalidade: number;
+  curva_desempenho?: any[];
+  programa_alimentar: any[];
+  medicamentos_permitidos: string[];
+  causas_mortalidade: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Empresa {
   id: string;
   nome: string;

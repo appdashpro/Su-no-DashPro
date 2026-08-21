@@ -16,11 +16,12 @@ interface VisitsListProps {
  onExport?: (data?: Visit[]) => void;
  viewingIntegradoId?: string | null;
  onSetViewingIntegradoId?: (id: string | null) => void;
+  empresas?: {id: string, nome: string}[];
 }
 
 type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'idade-desc' | 'idade-asc';
 
-export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onNewVisit, onNewLote, onExport, viewingIntegradoId, onSetViewingIntegradoId, pendingSyncIds }: VisitsListProps) {
+export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onNewVisit, onNewLote, onExport, viewingIntegradoId, onSetViewingIntegradoId, pendingSyncIds, empresas = [] }: VisitsListProps) {
  const [searchTerm, setSearchTerm] = useState('');
  const [sortBy, setSortBy] = useState<SortOption>('date-desc');
  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -213,7 +214,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <td className="px-2 py-2 whitespace-nowrap">{
  new Date(Number(v.date.split('-')[0]), Number(v.date.split('-')[1]) - 1, Number(v.date.split('-')[2])).toLocaleDateString('pt-BR')
  }</td>
- {!isTecnicoCliente && <td className="px-2 py-2 whitespace-nowrap text-slate-600">{integrado?.empresaName || '-'}</td>}
+ {!isTecnicoCliente && <td className="px-2 py-2 whitespace-nowrap text-slate-600">{integrado?.empresaName || empresas.find(e => e.id === integrado?.empresaId)?.nome || '-'}</td>}
  <td className={`px-2 py-2 font-medium ${pendingSyncIds?.includes(v.id) ? 'text-red-600 font-bold' : 'text-slate-800'}`} title={pendingSyncIds?.includes(v.id) ? "Aguardando sincronização com a nuvem" : ""}>{integrado?.name || 'Desconhecido'}</td>
  <td className="px-2 py-2 whitespace-nowrap text-slate-600">{integrado?.alojamentoDate ? new Date(Number(integrado.alojamentoDate.split('-')[0]), Number(integrado.alojamentoDate.split('-')[1]) - 1, Number(integrado.alojamentoDate.split('-')[2])).toLocaleDateString('pt-BR') : '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap"><span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">{v.tipoLote || 'Misto'}</span></td>

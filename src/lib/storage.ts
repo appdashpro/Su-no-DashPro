@@ -8,7 +8,10 @@ const VISITS_KEY = 'suino_dashpro_visits';
 export const OFFLINE_QUEUE_KEY = 'suino_dashpro_offline_queue';
 export const OFFLINE_DELETE_VISIT_QUEUE = 'suino_dashpro_offline_delete_visit';
 export const OFFLINE_DELETE_INTEGRADO_QUEUE = 'suino_dashpro_offline_delete_integrado';
-export const OFFLINE_EDIT_INTEGRADO_QUEUE = 'suino_dashpro_offline_edit_integrado';
+export const OFFLINE_EDIT_INTEGRADO_QUEUE = "suino_dashpro_offline_edit_integrado";
+export const CONFIGS_KEY = "suino_dashpro_empresa_configs";
+export const getEmpresaConfigsLocal = () => { try { const data = safeStorage.getItem(CONFIGS_KEY); return data ? JSON.parse(data) : []; } catch { return []; } };
+
 const EMPRESA_ID = '00000000-0000-0000-0000-000000000001';
 
 const getIntegradosLocal = (): Integrado[] => {
@@ -288,7 +291,15 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
 
       const { data: integradosDB } = await supabase.from('integrados').select('*').range(0, 9999);
       const { data: lotesDB } = await supabase.from('lotes').select('*').range(0, 9999);
-      const { data: empresasDB } = await supabase.from('empresas').select('*').range(0, 9999);
+      const { data: empresasDB } = await supabase.from("empresas").select("*").range(0, 9999);
+      try {
+        const { data: configsDB, error: configError } = await supabase.from("empresa_configuracoes").select("*");
+        if (configError) {
+           console.warn("Table empresa_configuracoes not available yet", configError.message);
+        } else if (configsDB) {
+           safeStorage.setItem(CONFIGS_KEY, JSON.stringify(configsDB));
+        }
+      } catch (e) { console.warn("Table empresa_configuracoes error", e); }
 
       let visitasDB: any[] = [];
       let cargasDB: any[] = [];
@@ -557,19 +568,23 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
        const localIntegrados = getIntegradosLocal();
        const localLote = localIntegrados.find(i => i.id === loteId);
         if (localLote) {
-           const targetEmpresaId = localLote.empresaId || EMPRESA_ID;
+           let targetEmpresaId = localLote.empresaId || EMPRESA_ID;
 
            // We try to upsert the Integrado and Lote to prevent Foreign Key errors
-           const { data: existingIntegrados } = await supabase.from('integrados').select('id').eq('nome', localLote.name);
+           const { data: existingIntegrados } = await supabase.from('integrados').select('id, empresa_id').eq('nome', localLote.name);
            let dbIntegradoId = existingIntegrados && existingIntegrados.length > 0 ? existingIntegrados[0].id : crypto.randomUUID();
+           if (existingIntegrados && existingIntegrados.length > 0 && existingIntegrados[0].empresa_id) {
+               targetEmpresaId = existingIntegrados[0].empresa_id;
+           }
            
            if (!existingIntegrados || existingIntegrados.length === 0) {
-               await supabase.from('integrados').upsert({
+               const { error: errInt } = await supabase.from('integrados').upsert({
                    id: dbIntegradoId,
                    empresa_id: targetEmpresaId,
                    nome: localLote.name,
                    ativo: true
                });
+               if (errInt) console.error("Error upserting integrado:", errInt);
            }
 
            const dbLote = await supabase.from('lotes').select('animais_alojados').eq('id', loteId).maybeSingle();
@@ -580,8 +595,9 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
                    finalAloj = dbLote.data.animais_alojados;
                }
             }
+            if (finalAloj <= 0) finalAloj = 1;
 
-            await supabase.from('lotes').upsert({
+            const { error: errLote } = await supabase.from('lotes').upsert({
                 id: loteId,
                 empresa_id: targetEmpresaId,
                 integrado_id: dbIntegradoId,
@@ -591,10 +607,19 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
                tipo_lote: v.tipoLote || 'Misto',
                status: localLote.status === 'Em andamento' ? 'Ativo' : 'Encerrado'
            });
+           if (errLote) console.error("Error upserting lote:", errLote);
        }
        
        let finalUserId = '910e47b0-22c9-497e-9eaa-0816d7fce6d4'; // Fallback admin
        let finalEmpresaId = localLote?.empresaId || EMPRESA_ID;
+       
+       // Ensure we use the exact same DB empresa ID as the Integrado, just like we did for Lote
+       if (localLote) {
+           const { data: dbInts } = await supabase.from('integrados').select('empresa_id').eq('nome', localLote.name);
+           if (dbInts && dbInts.length > 0 && dbInts[0].empresa_id) {
+               finalEmpresaId = dbInts[0].empresa_id;
+           }
+       }
        
        if (userId) {
            // 1. Try to find user by auth_uid
@@ -613,9 +638,8 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
            
            if (userProfile) {
                finalUserId = userProfile.id;
-               if (userProfile.empresa_id) {
-                   finalEmpresaId = userProfile.empresa_id;
-               }
+               // DO NOT OVERWRITE finalEmpresaId with userProfile.empresa_id
+               // because finalEmpresaId must match the Lote's empresa_id for the FK!
            } else {
                console.warn("User not found in usuarios table. Falling back to known admin.");
                // Try to insert the user gracefully if missing
@@ -630,7 +654,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
                    }).select('id').single();
                    if (newUser) {
                        finalUserId = newUser.id;
-                       finalEmpresaId = EMPRESA_ID;
+                       // DO NOT overwrite finalEmpresaId
                    }
                } catch(e) {
                    console.error("Fallback insert failed:", e);
@@ -653,14 +677,9 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
 
        const { error: errVisita } = await supabase.from('visitas').upsert(visitaRow);
        if (errVisita) {
-          if (isNetworkError(errVisita)) {
-             addVisitsToOfflineQueue([v]);
-             continue;
-          } else {
-             // Save to queue anyway so it's not lost on reload during schema mismatch
-             addVisitsToOfflineQueue([v]);
-             throw errVisita;
-          }
+          console.error("Erro upsert visita:", errVisita);
+          addVisitsToOfflineQueue([v]);
+          continue;
        }
 
        // Also update the Lote since VisitForm can change lote-level fields
@@ -675,12 +694,17 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
            }
        }
 
+       if (finalAloj2 <= 0) finalAloj2 = 1;
        const { error: errLote } = await supabase.from('lotes').update({
          animais_alojados: finalAloj2,
          peso_alojamento_kg: v.pesoAloj || 0,
          tipo_lote: v.tipoLote || 'Misto'
        }).eq('id', loteId);
-       if (errLote && !isNetworkError(errLote)) throw errLote;
+       if (errLote) {
+           console.error("Erro update lote:", errLote);
+           addVisitsToOfflineQueue([v]);
+           continue;
+       }
 
        await supabase.from('cargas_racao').delete().eq('visita_id', v.id);
        
@@ -708,8 +732,9 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
          }));
          const { error: errCargas } = await supabase.from('cargas_racao').insert(cargasToInsert);
          if (errCargas) {
+             console.error("Erro insert cargas:", errCargas);
              addVisitsToOfflineQueue([v]);
-             if (!isNetworkError(errCargas)) throw errCargas;
+             continue;
          }
        }
 
@@ -737,8 +762,9 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
          }));
          const { error: errTratamentos } = await supabase.from('tratamentos').insert(tratamentosToInsert);
          if (errTratamentos) {
+             console.error("Erro insert tratamentos:", errTratamentos);
              addVisitsToOfflineQueue([v]);
-             if (!isNetworkError(errTratamentos)) throw errTratamentos;
+             continue;
          }
        }
     }

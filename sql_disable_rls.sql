@@ -2,6 +2,9 @@
 -- Execute este script no SQL Editor do seu projeto Supabase se houver bloqueios de RLS:
 
 -- 1. Desabilitar RLS nas tabelas principais para permitir sincronização e leitura direta
+ALTER TABLE IF EXISTS public.empresas DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.lotes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.cargas_racao DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.integrados DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.visitas DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.usuarios DISABLE ROW LEVEL SECURITY;

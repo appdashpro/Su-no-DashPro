@@ -165,6 +165,7 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
       const { data: usersData, error: uErr } = await supabase
         .from('usuarios')
         .select('*')
+        .is('deleted_at', null)
         .order('nome');
 
       if (!uErr && usersData && usersData.length > 0) {
@@ -382,12 +383,17 @@ export async function deleteUser(userId: string): Promise<boolean> {
     safeStorage.setItem(USERS_LIST_KEY, JSON.stringify(filtered));
 
     if (typeof navigator !== 'undefined' && navigator.onLine) {
-      const { error: opError } = await supabase.from('usuarios').delete().eq('id', userId);
+      // Instead of a hard delete which fails on foreign key constraints, 
+      // we do a soft-delete: mark the user as inactive and set deleted_at
+      const { error: opError } = await supabase.from('usuarios')
+        .update({ ativo: false, deleted_at: new Date().toISOString() })
+        .eq('id', userId);
       if (opError) throw opError;
     }
     return true;
-  } catch (e) {
+  } catch (e: any) {
     console.error('Error deleting user:', e);
+    alert('Erro ao excluir usuário no banco: ' + (e.message || JSON.stringify(e)));
     return false;
   }
 }
@@ -417,13 +423,14 @@ export function filterIntegradosForUser(integrados: Integrado[], user: UserProfi
       );
       return filtered;
     }
-    return [];
+    return integrados;
   }
 
   // TECNICO_CLIENTE or TECNICO
   if (user.papel === 'TECNICO_CLIENTE' || user.papel === 'TECNICO' || user.papel === 'ADMIN_EMPRESA') {
+    let filtered = integrados;
     if (user.clientes_permitidos && user.clientes_permitidos.length > 0) {
-      const filtered = integrados.filter(i => 
+      filtered = integrados.filter(i => 
         user.clientes_permitidos!.some(allowed => {
           if (!allowed) return false;
           if (allowed === i.empresaId) return true;
@@ -432,9 +439,12 @@ export function filterIntegradosForUser(integrados: Integrado[], user: UserProfi
           return allowed === i.id || allowedNorm === nameNorm || nameNorm.includes(allowedNorm) || allowedNorm.includes(nameNorm);
         })
       );
-      if (filtered.length > 0) return filtered;
+    } else if (user.empresa_id) {
+      filtered = integrados.filter(i => i.empresaId === user.empresa_id);
+    } else {
+      filtered = [];
     }
-    return integrados;
+    return filtered;
   }
 
   return integrados;
@@ -443,13 +453,13 @@ export function filterIntegradosForUser(integrados: Integrado[], user: UserProfi
 /**
  * Filter visits based on allowed integrados.
  */
-export function filterVisitsForUser(visits: Visit[], allowedIntegrados: Integrado[], user: UserProfile | null): Visit[] {
-  if (!user || user.papel === 'MASTER' || user.papel === 'SUPER_ADMIN') {
+export function filterVisitsForUser(visits: Visit[], allowedIntegrados: Integrado[], user: UserProfile | null, isFilterActive: boolean = false): Visit[] {
+  if (!isFilterActive && (!user || user.papel === 'MASTER' || user.papel === 'SUPER_ADMIN')) {
     return visits;
   }
 
   if (!allowedIntegrados || allowedIntegrados.length === 0) {
-    return visits;
+    return [];
   }
 
   const allowedIds = new Set(allowedIntegrados.map(i => i.id));

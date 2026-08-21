@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Tratamento, GrowthCurvePoint } from '../types';
-import { getActiveCurve } from '../data';
+import { getActiveCurve, DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE } from '../data';
 
 interface MedicationMemory {
   produto: string;
@@ -22,9 +22,11 @@ interface Props {
   pesoAmostradoKg?: number;
   onPesoChange?: (peso: number | undefined) => void;
   pesoEstimadoBase?: number;
+  medicamentosPermitidos?: string[];
+  causasMortalidade?: string[];
 }
 
-export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVivos, tipoLote, alojamentoDate, pesoAmostradoKg, onPesoChange, pesoEstimadoBase }: Props) {
+export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVivos, tipoLote, alojamentoDate, pesoAmostradoKg, onPesoChange, pesoEstimadoBase, medicamentosPermitidos, causasMortalidade }: Props) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const [memory, setMemory] = useState<MedicationMemory[]>([]);
@@ -207,6 +209,14 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
             ? String(savedTreatmentWeight)
             : (pesoEstimadoCurve > 0 ? pesoEstimadoCurve.toFixed(2) : '')));
 
+  const activeMedicamentos = (medicamentosPermitidos && medicamentosPermitidos.length > 0) 
+    ? medicamentosPermitidos 
+    : DEFAULT_MEDICAMENTOS_PERMITIDOS;
+
+  const activeCausas = (causasMortalidade && causasMortalidade.length > 0) 
+    ? causasMortalidade 
+    : DEFAULT_CAUSAS_MORTALIDADE;
+
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden bg-white mt-4">
       <button
@@ -255,25 +265,36 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Produto / Princípio Ativo</label>
-                  <input
-                    list="medication-suggestions"
-                    type="text"
+                  <label className="block text-xs text-slate-500 mb-1">Princípio Ativo</label>
+                  <select
                     value={tratamento.produto}
                     onChange={(e) => handleUpdate(index, 'produto', e.target.value)}
-                    className="w-full border border-slate-200 rounded p-1.5 text-sm"
-                    placeholder="Ex: Amoxicilina"
-                  />
+                    className="w-full border border-slate-200 rounded p-1.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">Selecione o Princípio Ativo...</option>
+                    {activeMedicamentos.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                    {tratamento.produto && !activeMedicamentos.includes(tratamento.produto) && (
+                      <option value={tratamento.produto}>{tratamento.produto} (Outro)</option>
+                    )}
+                  </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Motivo do Tratamento</label>
-                  <input
-                    type="text"
+                  <label className="block text-xs text-slate-500 mb-1">Motivo / Causa</label>
+                  <select
                     value={tratamento.motivo || ''}
                     onChange={(e) => handleUpdate(index, 'motivo', e.target.value)}
-                    className="w-full border border-slate-200 rounded p-1.5 text-sm"
-                    placeholder="Ex: Doença Respiratória"
-                  />
+                    className="w-full border border-slate-200 rounded p-1.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">Selecione o Motivo / Causa...</option>
+                    {activeCausas.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                    {tratamento.motivo && !activeCausas.includes(tratamento.motivo) && (
+                      <option value={tratamento.motivo}>{tratamento.motivo} (Outro)</option>
+                    )}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs text-slate-500 mb-1">Dose (mg/kg peso vivo)</label>

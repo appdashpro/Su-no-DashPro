@@ -16,6 +16,7 @@ import { Login } from './components/Login';
 import { Notifications } from './components/Notifications';
 import { MedicationAnalysis } from './components/MedicationAnalysis';
 import { UsuariosGestao } from './components/UsuariosGestao';
+import { EmpresaConfigGestao } from './components/EmpresaConfigGestao';
 import { Visit, Integrado, UserProfile, getRoleLabel } from './types';
 import { Menu, X, LogOut, Download, Wifi, WifiOff, RefreshCw, Moon, Sun, Users, ClipboardList, Shield } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -102,7 +103,8 @@ export default function App() {
    }
    if (typeof window !== "undefined" && !navigator.onLine) return;
    try {
-     const { data, error } = await supabase.from("empresas").select("*").eq("ativo", true);
+     const { data, error } = await supabase.from("empresas").select("*");
+     console.log("LOAD EMPRESAS RESULT:", data, error);
      if (!error && data) {
        setEmpresas(data);
        if (typeof window !== "undefined") safeStorage.setItem('CACHED_EMPRESAS', JSON.stringify(data));
@@ -377,6 +379,7 @@ export default function App() {
        console.warn('Error resolving profile on auth state change:', e);
      }
      loadData();
+     loadEmpresas();
    }
  });
 
@@ -422,18 +425,21 @@ export default function App() {
  if (!integradoNome || !alojamentoDate) return;
  const existing = integrados.find(i => i.id === newVisit.integradoId);
  if (!existing) {
+   const empresaFound = empresaId ? empresas.find(e => e.id === empresaId) : undefined;
    const newIntegrado: Integrado = {
      id: newVisit.integradoId,
      name: integradoNome,
      alojamentoDate,
      status: 'Em andamento',
-     empresaId: empresaId || undefined
+     empresaId: empresaId || undefined,
+     empresaName: empresaFound ? empresaFound.nome : undefined
    };
    const updatedIntegrados = [...integrados, newIntegrado];
    setIntegrados(updatedIntegrados);
    await storage.saveIntegrados(updatedIntegrados);
  } else if (existing.name !== integradoNome || existing.alojamentoDate !== alojamentoDate || (empresaId && existing.empresaId !== empresaId)) {
-   const updatedIntegrados = integrados.map(i => i.id === existing.id ? { ...i, name: integradoNome, alojamentoDate, empresaId: empresaId || i.empresaId } : i);
+   const empresaFound = empresaId ? empresas.find(e => e.id === empresaId) : undefined;
+   const updatedIntegrados = integrados.map(i => i.id === existing.id ? { ...i, name: integradoNome, alojamentoDate, empresaId: empresaId || i.empresaId, empresaName: empresaFound ? empresaFound.nome : i.empresaName } : i);
    setIntegrados(updatedIntegrados);
    await storage.saveIntegrados(updatedIntegrados);
  }
@@ -508,20 +514,20 @@ export default function App() {
  };
 
   const handleUpdateIntegrado = async (integrado: Integrado) => {
- try {
-   let syncFailed = false;
-   if (isOnline) {
-     const { error } = await supabase
-       .from('lotes')
-       .update({
-         data_alojamento: integrado.alojamentoDate,
-         status: integrado.status === 'Em andamento' ? 'Ativo' : 'Encerrado',
-         
-       })
-       .eq('id', integrado.id);
-     
-     if (error) {
-       console.error('Erro ao atualizar lote no Supabase:', error);
+    try {
+      let syncFailed = false;
+      if (isOnline) {
+        const { error } = await supabase
+          .from('lotes')
+          .update({
+            data_alojamento: integrado.alojamentoDate,
+            status: integrado.status === 'Em andamento' ? 'Ativo' : 'Encerrado',
+            ...(integrado.empresaId ? { empresa_id: integrado.empresaId } : {})
+          })
+          .eq('id', integrado.id);
+        
+        if (error) {
+          console.error('Erro ao atualizar lote no Supabase. Detalhes:', JSON.stringify(error, null, 2));
        syncFailed = true;
      }
    } else {
@@ -672,20 +678,44 @@ export default function App() {
  };
 
  const visibleEmpresas = React.useMemo(() => {
-   if (!currentUserProfile || currentUserProfile.papel === 'MASTER' || currentUserProfile.papel === 'SUPER_ADMIN') {
-     return empresas;
-   }
-   if (currentUserProfile.papel === 'TECNICO_NUTRON' || currentUserProfile.papel === 'COORDENADOR') {
-     if (currentUserProfile.clientes_permitidos && currentUserProfile.clientes_permitidos.length > 0) {
-       return empresas.filter(e => currentUserProfile.clientes_permitidos!.includes(e.id));
-     }
-     return [];
-   }
-   if (currentUserProfile.empresa_id) {
-     return empresas.filter(e => e.id === currentUserProfile.empresa_id);
-   }
-   return empresas;
- }, [empresas, currentUserProfile]);
+  const defaultEmpresas = [
+    { id: '00000000-0000-0000-0000-000000000001', nome: 'Rações Pastre', tipo: 'CLIENTE', ativo: true },
+    { id: '00000000-0000-0000-0000-000000000002', nome: 'Grupo Bugio', tipo: 'CLIENTE', ativo: true },
+    { id: '00000000-0000-0000-0000-000000000003', nome: 'Agropecuaria Mugnol', tipo: 'CLIENTE', ativo: true }
+  ];
+
+  const baseEmpresas = (empresas && empresas.length > 0) 
+    ? empresas 
+    : (() => {
+        // Fallback para quando o RLS da tabela empresas no Supabase bloqueia a leitura (retornando array vazio)
+        const map = new Map();
+        defaultEmpresas.forEach(e => map.set(e.id, e));
+        integrados.filter(i => i.empresaId && i.empresaName).forEach(i => {
+          if (!map.has(i.empresaId)) {
+             map.set(i.empresaId, { id: i.empresaId, nome: i.empresaName, ativo: true });
+          }
+        });
+        return Array.from(map.values());
+      })();
+
+  if (!currentUserProfile || currentUserProfile.papel === 'MASTER' || currentUserProfile.papel === 'SUPER_ADMIN') {
+    return baseEmpresas;
+  }
+
+  const permitidos = currentUserProfile.clientes_permitidos || [];
+  const empresaLogada = currentUserProfile.empresa_id;
+  
+  const isNutronOrCoord = currentUserProfile.papel === 'TECNICO_NUTRON' || currentUserProfile.papel === 'COORDENADOR';
+  if (isNutronOrCoord && permitidos.length === 0) {
+    return baseEmpresas;
+  }
+
+  return baseEmpresas.filter(e => {
+    const isPermitido = permitidos.includes(e.id);
+    const isPropria = empresaLogada === e.id;
+    return isPermitido || isPropria;
+  });
+}, [empresas, currentUserProfile, integrados]);
 
  const visibleIntegrados = React.useMemo(() => {
    let filtered = filterIntegradosForUser(integrados, currentUserProfile);
@@ -695,7 +725,7 @@ export default function App() {
    return filtered;
  }, [integrados, currentUserProfile, selectedEmpresaFilter]);
  
- const visibleVisits = React.useMemo(() => filterVisitsForUser(visits, visibleIntegrados, currentUserProfile), [visits, visibleIntegrados, currentUserProfile]);
+ const visibleVisits = React.useMemo(() => filterVisitsForUser(visits, visibleIntegrados, currentUserProfile, !!selectedEmpresaFilter), [visits, visibleIntegrados, currentUserProfile, selectedEmpresaFilter]);
 
  const renderContent = () => {
  
@@ -733,7 +763,7 @@ export default function App() {
  onNewVisit={() => { setEditingVisitId(null); setIsNewLoteMode(false); setIsVisitFormOpen(true); }}
  onNewLote={() => { setEditingVisitId(null); setIsNewLoteMode(true); setIsVisitFormOpen(true); }}
  viewingIntegradoId={viewingIntegradoId}
- onSetViewingIntegradoId={setViewingIntegradoId}
+ onSetViewingIntegradoId={setViewingIntegradoId} empresas={visibleEmpresas} pendingSyncIds={pendingSyncIds}
  />
  </div>
  )
@@ -752,6 +782,7 @@ export default function App() {
  {currentTab === 'medicamentos' && <MedicationAnalysis visits={visibleVisits} integrados={visibleIntegrados} />}
  {currentTab === 'curva' && <ReferenceCurve />}
  {currentTab === 'importar' && <ImportData onImportComplete={() => { loadData(); setCurrentTab('dashboard'); }} />}
+ {currentTab === 'parametros' && <EmpresaConfigGestao currentUser={currentUserProfile} />}
  {currentTab === 'usuarios' && <UsuariosGestao integrados={integrados} currentUser={currentUserProfile} onImpersonate={(user) => {
   setMasterUserProfile(currentUserProfile);
   setCurrentUserProfile(user);
@@ -780,6 +811,7 @@ export default function App() {
  case 'curva': return 'Curva de Referência';
  case 'importar': return 'Importar Base de Dados';
  case 'usuarios': return 'Equipe & Controle de Clientes (RLS)';
+ case 'parametros': return 'Parâmetros por Cliente';
  default: return 'Visão Geral';
  }
  }
@@ -850,9 +882,23 @@ export default function App() {
  <Menu className="w-6 h-6" />
  </button>
  <h1 id="header-title" className="text-lg md:text-xl font-bold text-slate-800 truncate">{getPageTitle()}</h1>
- 
- 
+ </div>
 
+ <div className="flex items-center gap-2 shrink-0">
+ {visibleEmpresas.length > 1 && (
+   <div className="hidden sm:flex items-center mr-2">
+     <select
+       value={selectedEmpresaFilter || ""}
+       onChange={(e) => setSelectedEmpresaFilter(e.target.value || null)}
+       className="text-sm border border-slate-200 rounded-md py-1.5 px-3 bg-slate-50 text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+     >
+       <option value="">Todos os Clientes</option>
+       {visibleEmpresas.filter(e => e.ativo !== false).map(emp => (
+         <option key={emp.id} value={emp.id}>{emp.nome}</option>
+       ))}
+     </select>
+   </div>
+ )}
  {currentTab === 'integrados' && (
  <div className="hidden sm:flex items-center gap-3 text-xs text-slate-600 ml-2 border-l border-slate-200 pl-4">
  <div className="flex items-center gap-1.5">

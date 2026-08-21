@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Activity, Users, ClipboardList, LineChart, AlertCircle, HelpCircle, Shield, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Home, Activity, Users, ClipboardList, LineChart, AlertCircle, HelpCircle, Shield, ShieldCheck, RefreshCw, Settings } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { UserProfile, getRoleLabel } from '../types';
 
@@ -29,6 +29,7 @@ export function Sidebar({ currentTab, setCurrentTab, onStartTutorial, userProfil
     { id: 'curva', label: 'Curva de Referência', icon: LineChart, show: true },
     { id: 'importar', label: 'Importar Dados', icon: ClipboardList, show: isMaster || isNutron },
     { id: 'usuarios', label: 'Equipe & Clientes', icon: ShieldCheck, show: isMaster },
+    { id: 'parametros', label: 'Parâmetros por Cliente', icon: Settings, show: isMaster },
   ].filter(item => item.show);
 
   const getBadgeStyle = () => {

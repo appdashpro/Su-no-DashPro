@@ -1,4 +1,5 @@
 import { safeStorage } from "../lib/safeStorage";
+import { getEmpresaConfigsLocal } from "../lib/storage";
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -23,6 +24,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardProps) {
+  const configs = getEmpresaConfigsLocal();
  const [selectedIntegradoIds, setSelectedIntegradoIds] = useState<string[]>(() => {
  const saved = safeStorage.getItem('DASHBOARD_SELECTED_INTEGRADOS');
  if (saved) {
@@ -87,7 +89,9 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  const activeDotRadius = windowWidth >= 1024 ? 9 : 5;
 
  // Process active integrados only based on status
- const activeIntegrados = useMemo(() => {
+ const [currentConfig, setCurrentConfig] = useState<any>(null);
+
+  const activeIntegrados = useMemo(() => {
  return integrados.filter(i => i.status === 'Em andamento');
  }, [integrados]);
 
@@ -579,7 +583,9 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  </div>
  <p className="text-lg font-bold mt-0.5">{stats.avgMortalidade.toFixed(2)}%</p>
  </div>
- <p className="text-[10px] text-blue-200 font-medium mt-1 relative z-10">Média dos lotes em andamento</p>
+ <p className="text-[10px] text-blue-200 font-medium mt-1 relative z-10">
+    {currentConfig?.meta_mortalidade ? `Meta configurada: ${currentConfig.meta_mortalidade}%` : 'Média dos lotes em andamento'}
+  </p>
  </div>
  </div>
 
@@ -887,7 +893,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  const singleIntegrado = filteredIntegrados[0];
  const age = calculateVisitAge(v, singleIntegrado);
  const realConsumo = calculateRealConsumption(v);
- const expected = getExpectedConsumption(age, v.tipoLote, v.pesoAloj, singleIntegrado?.alojamentoDate, singleIntegrado?.status, singleIntegrado?.fechamentoDate);
+ const expected = getExpectedConsumption(age, v.tipoLote, v.pesoAloj, singleIntegrado?.alojamentoDate, singleIntegrado?.status, singleIntegrado?.fechamentoDate, currentConfig);
  const dif = realConsumo > 0 ? Number((realConsumo - expected).toFixed(2)) : 0;
  const hasTratamentos = v.tratamentos && v.tratamentos.length > 0;
  return (

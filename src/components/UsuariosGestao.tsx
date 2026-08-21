@@ -40,7 +40,7 @@ export function UsuariosGestao({ integrados, currentUser, onImpersonate }: Usuar
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('todos');
   
-  // Modal state
+  // User Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [formData, setFormData] = useState({
@@ -56,12 +56,33 @@ export function UsuariosGestao({ integrados, currentUser, onImpersonate }: Usuar
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [authWarning, setAuthWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showGuide, setShowGuide] = useState(false);
 
-  // SQL Script Viewer Modal
-  const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
-  const [isRpcModalOpen, setIsRpcModalOpen] = useState(false);
-  const [copiedSql, setCopiedSql] = useState(false);
+  // Empresa / Cliente Modal State
+  const [isEmpresaModalOpen, setIsEmpresaModalOpen] = useState(false);
+  const [empresaFormData, setEmpresaFormData] = useState({
+    nome: '',
+    cnpj: ''
+  });
+  const [savingEmpresa, setSavingEmpresa] = useState(false);
+
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+
+  const isMasterUser = currentUser?.papel === 'MASTER' || 
+                       currentUser?.papel === 'SUPER_ADMIN' || 
+                       (currentUser?.email && MASTER_EMAILS.includes(currentUser.email.toLowerCase()));
+
+  // Listen for Escape key to close any open modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsModalOpen(false);
+        setIsEmpresaModalOpen(false);
+        setUserToDelete(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -75,22 +96,23 @@ export function UsuariosGestao({ integrados, currentUser, onImpersonate }: Usuar
     }
   };
 
+  const loadEmpresas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('empresas')
+        .select('*')
+        .eq('ativo', true)
+        .order('nome');
+      if (data && !error) {
+        setEmpresas(data);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar empresas:', err);
+    }
+  };
+
   useEffect(() => {
     loadUsers();
-    async function loadEmpresas() {
-      try {
-        const { data, error } = await supabase
-          .from('empresas')
-          .select('*')
-          .eq('ativo', true)
-          .order('nome');
-        if (data && !error) {
-          setEmpresas(data);
-        }
-      } catch (err) {
-        console.error('Erro ao carregar empresas:', err);
-      }
-    }
     loadEmpresas();
   }, []);
 
@@ -124,6 +146,43 @@ export function UsuariosGestao({ integrados, currentUser, onImpersonate }: Usuar
     setIsModalOpen(true);
   };
 
+  const handleSaveEmpresa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!empresaFormData.nome.trim()) {
+      setError('O nome do cliente/empresa é obrigatório.');
+      return;
+    }
+
+    setSavingEmpresa(true);
+    setError(null);
+    try {
+      const newId = `emp_${Date.now()}`;
+      const { data, error: err } = await supabase
+        .from('empresas')
+        .insert([{
+          id: newId,
+          nome: empresaFormData.nome.trim(),
+          cnpj: empresaFormData.cnpj.trim() || null,
+          ativo: true
+        }])
+        .select()
+        .single();
+
+      if (err) throw err;
+
+      setSaveSuccess(`Cliente "${empresaFormData.nome.trim()}" cadastrado com sucesso!`);
+      setTimeout(() => setSaveSuccess(null), 4000);
+      setIsEmpresaModalOpen(false);
+      setEmpresaFormData({ nome: '', cnpj: '' });
+      await loadEmpresas();
+    } catch (err: any) {
+      console.error('Erro ao cadastrar cliente:', err);
+      setError(err.message || 'Erro ao cadastrar cliente/empresa.');
+    } finally {
+      setSavingEmpresa(false);
+    }
+  };
+
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.nome.trim() || !formData.email.trim()) {
@@ -131,7 +190,12 @@ export function UsuariosGestao({ integrados, currentUser, onImpersonate }: Usuar
       return;
     }
 
-    if (!editingUser && formData.senha && formData.senha.length < 6) {
+    if (!editingUser) {
+      if (!formData.senha || formData.senha.length < 6) {
+        setError('A senha é obrigatória para novos usuários e deve ter no mínimo 6 caracteres.');
+        return;
+      }
+    } else if (formData.senha && formData.senha.length < 6) {
       setError('A senha deve ter no mínimo 6 caracteres.');
       return;
     }
@@ -157,26 +221,15 @@ export function UsuariosGestao({ integrados, currentUser, onImpersonate }: Usuar
       );
 
       if (result.success) {
-        if (result.authError === 'rpc_missing') {
-          setError('Para alterar e-mail/senha de um usuário existente, instale a Função SQL (RPC) no Supabase.');
-          setIsRpcModalOpen(true);
-          return; // Do not close the modal
-        }
-        
         if (result.authCreated) {
           setSaveSuccess(`Usuário e credenciais de login atualizados no Supabase com sucesso!`);
-        } else if (result.authError === 'signup_disabled') {
-          setSaveSuccess('Usuário salvo nas permissões com sucesso!');
-          setAuthWarning(
-            `Atenção: O Supabase está com "Signups not allowed" bloqueado para auto-registro. Para vincular a senha definida para ${userToSave.email}, acesse o Supabase Dashboard > Authentication > Users > "Add user" ou ative "Allow new users to sign up" em Authentication > Providers > Email.`
-          );
         } else if (result.authError === 'already_exists') {
           setSaveSuccess('Usuário e permissões atualizados! A conta de login já existia no Supabase.');
         } else {
           setSaveSuccess('Usuário e vínculos salvos com sucesso!');
         }
 
-        setTimeout(() => setSaveSuccess(null), 5000);
+        setTimeout(() => setSaveSuccess(null), 4000);
         setIsModalOpen(false);
         await loadUsers();
       } else {
@@ -189,17 +242,23 @@ export function UsuariosGestao({ integrados, currentUser, onImpersonate }: Usuar
     }
   };
 
-  const handleDeleteUser = async (user: UserProfile) => {
+  const handleDeleteUser = (user: UserProfile) => {
     if (MASTER_EMAILS.includes(user.email.toLowerCase())) {
-      alert('O usuário Master principal não pode ser excluído.');
+      setError('O usuário Master principal não pode ser excluído.');
       return;
     }
+    setUserToDelete(user);
+  };
 
-    if (confirm(`Tem certeza que deseja remover o usuário ${user.nome} (${user.email})?`)) {
-      setLoading(true);
-      await deleteUser(user.id);
-      await loadUsers();
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    setLoading(true);
+    const success = await deleteUser(userToDelete.id);
+    if (!success) {
+      setError('Erro ao excluir usuário. Verifique se ele possui vínculos que impedem a exclusão.');
     }
+    setUserToDelete(null);
+    await loadUsers();
   };
 
   const toggleIntegradoSelection = (idOrName: string) => {
@@ -241,22 +300,6 @@ export function UsuariosGestao({ integrados, currentUser, onImpersonate }: Usuar
     });
   }, [users, searchTerm, roleFilter]);
 
-  const copySqlScript = () => {
-    const sqlContent = `-- SQL RLS Setup for Supabase
--- Execute no SQL Editor do Supabase para ativar o RLS completo:
-ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tecnico_integrados ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.integrados ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.lotes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
-
--- Veja o arquivo /supabase_rls_setup.sql para o script completo com todas as funções e regras.`;
-
-    navigator.clipboard.writeText(sqlContent);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2500);
-  };
-
   return (
     <div className="space-y-6">
       {/* Header & Master Badge */}
@@ -269,27 +312,35 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-                  Controle de Acesso e Clientes (RLS)
+                  Controle de Acesso e Clientes
                 </h2>
-                <span className="px-2.5 py-0.5 text-xs font-bold bg-purple-100 text-purple-800 rounded-full border border-purple-200">
-                  Exclusivo Master
-                </span>
+                {isMasterUser && (
+                  <span className="px-2.5 py-0.5 text-xs font-bold bg-purple-100 text-purple-800 rounded-full border border-purple-200">
+                    Acesso Master
+                  </span>
+                )}
               </div>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                Cadastre e atrele os clientes aos técnicos Nutron e restrinja os técnicos de clientes aos seus respectivos produtores.
+                Cadastre clientes (empresas) e atrele os técnicos Nutron ou da granja aos seus respectivos acessos.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => setIsSqlModalOpen(true)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-300 transition-colors"
-              title="Visualizar e copiar script SQL de RLS para o Supabase"
-            >
-              <Code2 className="w-4 h-4 text-slate-600" />
-              Script SQL RLS
-            </button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {isMasterUser && (
+              <button
+                onClick={() => {
+                  setEmpresaFormData({ nome: '', cnpj: '' });
+                  setError(null);
+                  setIsEmpresaModalOpen(true);
+                }}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-200 transition-colors shadow-2xs"
+                title="Cadastrar nova empresa ou cooperativa cliente"
+              >
+                <Building className="w-4 h-4 text-emerald-600" />
+                Novo Cliente
+              </button>
+            )}
             <button
               onClick={openNewUserModal}
               className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-all"
@@ -307,77 +358,12 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
           </div>
         )}
 
-        {authWarning && (
-          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold">{authWarning}</p>
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  onClick={() => setShowGuide(true)}
-                  className="inline-flex items-center gap-1 font-bold underline hover:text-amber-950"
-                >
-                  <Key className="w-3.5 h-3.5" /> Ver passo a passo no Supabase
-                </button>
-              </div>
-            </div>
+        {error && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{error}</span>
           </div>
         )}
-
-        {/* Guia Rápido de Senhas / Supabase Auth */}
-        <div className="mt-4 pt-4 border-t border-slate-100">
-          <button
-            onClick={() => setShowGuide(!showGuide)}
-            className="flex items-center justify-between w-full text-left text-xs font-semibold text-slate-700 hover:text-blue-600 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Key className="w-4 h-4 text-blue-600" />
-              <span>Como gerenciar Senhas e Logins no Supabase (Guia Rápido)</span>
-            </div>
-            {showGuide ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-          </button>
-
-          {showGuide && (
-            <div className="mt-3 p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 space-y-3">
-              <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                <span>🔐 Existem duas formas simples de definir a senha do seu usuário:</span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-2xs">
-                  <div className="font-bold text-blue-700 mb-1 flex items-center gap-1">
-                    <span>Opção 1: Criar direto no Supabase (Recomendado)</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-600">
-                    <li>Acesse o painel do <strong>Supabase</strong></li>
-                    <li>Vá em <strong>Authentication &gt; Users</strong></li>
-                    <li>Clique no botão verde <strong>"Add user" &gt; "Create user"</strong></li>
-                    <li>Digite o e-mail (ex: <code>wagner_galvan@cargill.com</code>) e a senha desejada</li>
-                    <li>Marque <strong>"Auto Confirm User"</strong> e clique em Salvar</li>
-                  </ol>
-                  <p className="mt-2 text-[10px] text-emerald-700 font-medium bg-emerald-50 p-1.5 rounded">
-                    ✓ O usuário herdará automaticamente todas as permissões e vínculos cadastrados aqui!
-                  </p>
-                </div>
-
-                <div className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-2xs">
-                  <div className="font-bold text-blue-700 mb-1 flex items-center gap-1">
-                    <span>Opção 2: Liberar cadastro direto pelo App</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-600">
-                    <li>No Supabase, vá em <strong>Authentication &gt; Providers &gt; Email</strong></li>
-                    <li>Marque a opção <strong>"Allow new users to sign up"</strong></li>
-                    <li>Desmarque <strong>"Confirm email"</strong> para liberar acesso instantâneo</li>
-                    <li>Clique em <strong>Save</strong></li>
-                  </ol>
-                  <p className="mt-2 text-[10px] text-blue-700 font-medium bg-blue-50 p-1.5 rounded">
-                    ✓ Com isso, sempre que você digitar uma senha no formulário abaixo, o app criará a conta no Supabase automaticamente!
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Search & Filter Bar */}
@@ -472,9 +458,9 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
                         {isMaster && (
                           <button 
                             type="button"
-                            onClick={() => { if (currentUser?.papel === 'MASTER' && onImpersonate) onImpersonate(user); }}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-purple-100 text-purple-800 rounded-full border border-purple-200 ${currentUser?.papel === 'MASTER' ? 'cursor-pointer hover:bg-purple-200 transition-colors' : ''}`}
-                            title={currentUser?.papel === 'MASTER' ? "Entrar como este usuário" : ""}
+                            onClick={() => { if (isMasterUser && onImpersonate) onImpersonate(user); }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-purple-100 text-purple-800 rounded-full border border-purple-200 ${isMasterUser ? 'cursor-pointer hover:bg-purple-200 transition-colors' : ''}`}
+                            title={isMasterUser ? "Entrar como este usuário" : ""}
                           >
                             👑 Acesso Master
                           </button>
@@ -482,9 +468,9 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
                         {isNutron && (
                           <button 
                             type="button"
-                            onClick={() => { if (currentUser?.papel === 'MASTER' && onImpersonate) onImpersonate(user); }}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-blue-100 text-blue-800 rounded-full border border-blue-200 ${currentUser?.papel === 'MASTER' ? 'cursor-pointer hover:bg-blue-200 transition-colors' : ''}`}
-                            title={currentUser?.papel === 'MASTER' ? "Entrar como este usuário" : ""}
+                            onClick={() => { if (isMasterUser && onImpersonate) onImpersonate(user); }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-blue-100 text-blue-800 rounded-full border border-blue-200 ${isMasterUser ? 'cursor-pointer hover:bg-blue-200 transition-colors' : ''}`}
+                            title={isMasterUser ? "Entrar como este usuário" : ""}
                           >
                             🏢 Técnico Nutron
                           </button>
@@ -492,9 +478,9 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
                         {isClient && (
                           <button 
                             type="button"
-                            onClick={() => { if (currentUser?.papel === 'MASTER' && onImpersonate) onImpersonate(user); }}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200 ${currentUser?.papel === 'MASTER' ? 'cursor-pointer hover:bg-emerald-200 transition-colors' : ''}`}
-                            title={currentUser?.papel === 'MASTER' ? "Entrar como este usuário" : ""}
+                            onClick={() => { if (isMasterUser && onImpersonate) onImpersonate(user); }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200 ${isMasterUser ? 'cursor-pointer hover:bg-emerald-200 transition-colors' : ''}`}
+                            title={isMasterUser ? "Entrar como este usuário" : ""}
                           >
                             🚜 Técnico Cliente
                           </button>
@@ -564,17 +550,107 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
         </div>
       </div>
 
+      {/* Modal Cadastrar Novo Cliente / Empresa */}
+      {isEmpresaModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsEmpresaModalOpen(false);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                  <Building className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Cadastrar Novo Cliente / Empresa
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsEmpresaModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-lg p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEmpresa} className="space-y-4 pt-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Nome do Cliente / Empresa *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={empresaFormData.nome}
+                  onChange={(e) => setEmpresaFormData({ ...empresaFormData, nome: e.target.value })}
+                  placeholder="Ex: Rações Pastre, Granja Santa Maria..."
+                  className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  CNPJ (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={empresaFormData.cnpj}
+                  onChange={(e) => setEmpresaFormData({ ...empresaFormData, cnpj: e.target.value })}
+                  placeholder="00.000.000/0000-00"
+                  className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsEmpresaModalOpen(false)}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEmpresa}
+                  className="px-5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all"
+                >
+                  {savingEmpresa ? 'Cadastrando...' : 'Cadastrar Cliente'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal Cadastrar / Editar Usuário */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] flex flex-col">
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsModalOpen(false);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900">
                 {editingUser ? 'Editar Usuário e Clientes' : 'Novo Usuário do Sistema'}
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg"
+                className="text-slate-400 hover:text-slate-600 text-lg p-1"
               >
                 ✕
               </button>
@@ -745,163 +821,39 @@ ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
         </div>
       )}
 
-      
-      {/* RPC SQL Setup Modal for Updating Users */}
-      {isRpcModalOpen && (
-        <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Code2 className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-base font-bold text-slate-900">
-                  Habilitar Alteração de E-mail e Senha
-                </h3>
-              </div>
+      {/* Modal Confirmar Exclusão */}
+      {userToDelete && (
+        <div 
+          className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setUserToDelete(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-slate-900 mb-2">Remover Usuário</h3>
+            <p className="text-sm text-slate-600 mb-6">
+              Tem certeza que deseja remover o usuário <strong className="text-slate-900">{userToDelete.nome}</strong> ({userToDelete.email})? 
+              <br/><br/>
+              Ele perderá o acesso ao sistema. O histórico de visitas vinculadas será mantido em segurança.
+            </p>
+            <div className="flex justify-end gap-3">
               <button
-                onClick={() => setIsRpcModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg"
+                onClick={() => setUserToDelete(null)}
+                className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
               >
-                ✕
+                Cancelar
               </button>
-            </div>
-            <div className="py-3 text-xs text-slate-600 flex-1 overflow-y-auto">
-              <p className="mb-2">
-                O Supabase bloqueia a alteração de credenciais (e-mail/senha) diretamente pelo cliente por questões de segurança nativas (Privacidade de Sessão).
-              </p>
-              <p className="mb-3 text-slate-500">
-                Para permitir que o <strong>Acesso Master</strong> atualize os acessos de outros técnicos, precisamos injetar uma permissão segura (RPC) no banco.
-                Copie o script abaixo e execute no <strong>SQL Editor</strong> do painel do Supabase.
-              </p>
-              <div className="bg-slate-900 text-slate-200 rounded-xl p-4 font-mono text-[11px] border border-slate-800">
-                <pre>{`-- Função Segura (RPC) para Forçar Atualização de Senha/Email
-CREATE OR REPLACE FUNCTION admin_update_user_credentials(
-  target_old_email TEXT,
-  new_email TEXT,
-  new_password TEXT
-) RETURNS boolean AS $
-DECLARE
-  v_user_id UUID;
-BEGIN
-  -- Tenta encontrar o usuário pelo email antigo
-  SELECT id INTO v_user_id FROM auth.users WHERE email = target_old_email LIMIT 1;
-  
-  IF v_user_id IS NULL THEN
-    RETURN false;
-  END IF;
-
-  -- Atualiza e-mail
-  IF new_email IS NOT NULL AND new_email != target_old_email THEN
-    UPDATE auth.users
-    SET 
-      email = new_email,
-      email_confirmed_at = now(),
-      updated_at = now()
-    WHERE id = v_user_id;
-  END IF;
-
-  -- Atualiza senha (apenas se for fornecida)
-  IF new_password IS NOT NULL AND length(new_password) >= 6 THEN
-    UPDATE auth.users
-    SET 
-      encrypted_password = crypt(new_password, gen_salt('bf', 10)),
-      updated_at = now()
-    WHERE id = v_user_id;
-  END IF;
-  
-  RETURN true;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;`}</pre>
-              </div>
-              <p className="mt-3 text-emerald-600 font-semibold">
-                Após executar o script no Supabase, tente clicar em Salvar novamente nesta tela.
-              </p>
-            </div>
-            <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
               <button
-                onClick={() => setIsRpcModalOpen(false)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 transition-colors text-slate-700 font-semibold rounded-lg text-xs"
+                onClick={confirmDeleteUser}
+                className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-sm transition-colors"
               >
-                Fechar
+                Remover Usuário
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Script SQL Supabase Viewer */}
-      {isSqlModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Code2 className="w-5 h-5 text-blue-600" />
-                <h3 className="text-base font-bold text-slate-900">
-                  Script SQL de Ativação do RLS no Supabase
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsSqlModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="py-3 text-xs text-slate-600">
-              <p className="mb-2">
-                O script completo foi gerado no arquivo <code>/supabase_rls_setup.sql</code> no seu projeto.
-              </p>
-              <p className="mb-3 text-slate-500">
-                Ele ativa o <strong>Row Level Security (RLS)</strong> diretamente na tabela <code>usuarios</code>, define as funções seguras (<code>is_master</code>, <code>get_my_allowed_integrados</code>) e aplica as políticas para Master (Roger Francescon), Técnico Nutron e Técnico do Cliente (ex: Rações Pastre).
-              </p>
-
-              <div className="bg-slate-900 text-slate-200 rounded-xl p-4 font-mono text-[11px] overflow-y-auto max-h-64 border border-slate-800">
-                <pre>{`-- ATIVAR RLS EM TODAS AS TABELAS
-ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.integrados ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.lotes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.visitas ENABLE ROW LEVEL SECURITY;
-
--- MASTER (Roger Francescon): Acesso total irrestrito
-CREATE POLICY "Master total" ON public.integrados FOR ALL TO authenticated
-USING (public.is_master()) WITH CHECK (public.is_master());
-
--- TÉCNICOS: Apenas integrados e lotes permitidos da tabela usuarios
-CREATE POLICY "Tecnicos permitidos" ON public.integrados FOR SELECT TO authenticated
-USING (id IN (SELECT integrado_id FROM public.get_my_allowed_integrados()));`}</pre>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-[11px] text-slate-500">
-                Arquivo: <code>supabase_rls_setup.sql</code>
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={copySqlScript}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl border border-blue-200 transition-colors"
-                >
-                  {copiedSql ? (
-                    <>
-                      <Check className="w-4 h-4 text-emerald-600" />
-                      Copiado!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4" />
-                      Copiar Instrução
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsSqlModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl"
-                >
-                  Fechar
-                </button>
-              </div>
             </div>
           </div>
         </div>
