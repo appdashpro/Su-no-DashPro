@@ -45,7 +45,7 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
 
       let basePesoEstimadoKg = visit.pesoAmostradoKg || 0;
       if (basePesoEstimadoKg <= 0) {
-        const { curve } = getActiveCurve(integrado.alojamentoDate || visit.date, 'Em andamento', visit.tipoLote || 'Misto');
+        const { curve } = getActiveCurve(integrado.alojamentoDate || visit.date, 'Em andamento', visit.tipoLote || 'Misto', undefined, undefined, undefined, visit.date);
         const expectedPoint = curve.find((p: GrowthCurvePoint) => p.dia >= (visit.idade || 0));
         basePesoEstimadoKg = expectedPoint ? expectedPoint.pesoInicial : 0;
       }

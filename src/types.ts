@@ -2,11 +2,33 @@
 // 1. MODELOS RELACIONAIS DO BANCO DE DADOS (SUPABASE V3)
 // ==============================================================================
 
+export interface MetasCurva {
+  metaAlojamento: number;
+  metaCrescimento1: number;
+  metaCrescimento2: number;
+  metaCrescimento3: number;
+  metaTerminacao1: number;
+  metaTerminacao2: number;
+  metaAcumulada: number;
+}
+
+export interface CurveConfig {
+  id: string;
+  nome: string;
+  dataVigencia: string;
+  tipoLote: 'Misto' | 'Macho' | 'Fêmea';
+  fase?: string;
+  tipoCalculo: 'DIA_UM' | 'PESO_ALOJAMENTO';
+  metaMortalidade: number;
+  curve: any[]; // GrowthCurvePoint[]
+  metas: MetasCurva;
+}
+
 export interface EmpresaConfig {
   empresa_id: string;
   tipo_calculo_curva: 'DIA_UM' | 'PESO_ALOJAMENTO';
   meta_mortalidade: number;
-  curva_desempenho?: any[];
+  curva_desempenho?: any[]; // Now can hold CurveConfig[] or legacy flat array
   programa_alimentar: any[];
   medicamentos_permitidos: string[];
   causas_mortalidade: string[];
@@ -201,6 +223,7 @@ export interface VisitaDB {
   sobra_silo_kg?: number | null;
   pontuacao_sanitaria?: string | null;
   recomendacoes?: string | null;
+  curva_consumo_id?: string | null;
   created_at: string;
   updated_at: string;
   created_by?: string | null;
@@ -284,6 +307,7 @@ export interface Visit {
   cargaAlojamento?: number;
   metaAlojamento?: number;
   consumoAlojamento?: number;
+  curva_consumo_id?: string;
   cargaCrescimento1?: number;
   metaCrescimento1?: number;
   consumoCrescimento1?: number;

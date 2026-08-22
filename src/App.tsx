@@ -11,12 +11,12 @@ import { IntegradoDetailsModal } from './components/IntegradoDetailsModal';
 import { Integrados } from './components/Integrados';
 import { IntegradoForm } from './components/IntegradoForm';
 import { ReferenceCurve } from './components/ReferenceCurve';
+import { EmpresaConfigGestao } from './components/EmpresaConfigGestao';
 import { ImportData } from './components/ImportData';
 import { Login } from './components/Login';
 import { Notifications } from './components/Notifications';
 import { MedicationAnalysis } from './components/MedicationAnalysis';
 import { UsuariosGestao } from './components/UsuariosGestao';
-import { EmpresaConfigGestao } from './components/EmpresaConfigGestao';
 import { Visit, Integrado, UserProfile, getRoleLabel } from './types';
 import { Menu, X, LogOut, Download, Wifi, WifiOff, RefreshCw, Moon, Sun, Users, ClipboardList, Shield } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -780,7 +780,7 @@ export default function App() {
  )}
  
  {currentTab === 'medicamentos' && <MedicationAnalysis visits={visibleVisits} integrados={visibleIntegrados} />}
- {currentTab === 'curva' && <ReferenceCurve />}
+ {currentTab === 'curva' && <ReferenceCurve currentUser={currentUserProfile} />}
  {currentTab === 'importar' && <ImportData onImportComplete={() => { loadData(); setCurrentTab('dashboard'); }} />}
  {currentTab === 'parametros' && <EmpresaConfigGestao currentUser={currentUserProfile} />}
  {currentTab === 'usuarios' && <UsuariosGestao integrados={integrados} currentUser={currentUserProfile} onImpersonate={(user) => {
@@ -808,7 +808,7 @@ export default function App() {
  case 'visitas': return isVisitFormOpen ? (editingVisitId ? 'Editar Lançamento' : (isNewLoteMode ? 'Novo Lote' : 'Novo Lançamento')) : 'Visitas';
  case 'integrados': return 'Gestão de Lotes';
  case 'medicamentos': return 'Análise de Medicamentos';
- case 'curva': return 'Curva de Referência';
+ case 'curva': return 'Curvas de Consumo';
  case 'importar': return 'Importar Base de Dados';
  case 'usuarios': return 'Equipe & Controle de Clientes (RLS)';
  case 'parametros': return 'Parâmetros por Cliente';

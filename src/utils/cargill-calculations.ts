@@ -137,7 +137,10 @@ export function calculateVisitFeedDeviation(visit: Partial<Visit>, integrado?: I
     pesoAloj,
     integrado?.alojamentoDate,
     integrado?.status,
-    integrado?.fechamentoDate
+    integrado?.fechamentoDate,
+    undefined,
+    undefined,
+    visit.date
   );
 
   const desvio = Number((realConsumo - expectedConsumo).toFixed(2));

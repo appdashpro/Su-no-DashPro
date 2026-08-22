@@ -217,13 +217,17 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
       });
       
       // Calculate expected consumption using reactive Cargill curve utilities
+      const sampleVisit = visitsAtAge[0];
       const expected = getExpectedConsumption(
         idade, 
         dominantTipoLote, 
         avgPesoAloj, 
         singleAlojamentoDate, 
         singleStatus, 
-        singleFechamentoDate
+        singleFechamentoDate,
+        undefined,
+        undefined,
+        sampleVisit?.date
       );
       
       const dataPoint: any = {
@@ -281,7 +285,10 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
           v.pesoAloj,
           integrado?.alojamentoDate,
           integrado?.status,
-          integrado?.fechamentoDate
+          integrado?.fechamentoDate,
+          undefined,
+          undefined,
+          v.date
         );
         
         const mortPct = calculateMortalityRate(v);
@@ -893,7 +900,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  const singleIntegrado = filteredIntegrados[0];
  const age = calculateVisitAge(v, singleIntegrado);
  const realConsumo = calculateRealConsumption(v);
- const expected = getExpectedConsumption(age, v.tipoLote, v.pesoAloj, singleIntegrado?.alojamentoDate, singleIntegrado?.status, singleIntegrado?.fechamentoDate, currentConfig);
+ const expected = getExpectedConsumption(age, v.tipoLote, v.pesoAloj, singleIntegrado?.alojamentoDate, singleIntegrado?.status, singleIntegrado?.fechamentoDate, currentConfig, undefined, v.date);
  const dif = realConsumo > 0 ? Number((realConsumo - expected).toFixed(2)) : 0;
  const hasTratamentos = v.tratamentos && v.tratamentos.length > 0;
  return (

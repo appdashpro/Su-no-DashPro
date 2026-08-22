@@ -346,7 +346,7 @@ export function preprocessImportData(rawData: string): PreProcessedData {
     
     // try to get alojamento date and status if integrated exists
     const integradoMatch = integradosMap.get(id);
-    const { metas } = getActiveCurve(integradoMatch?.alojamentoDate, integradoMatch?.status, tipoLote, integradoMatch?.fechamentoDate);
+    const { metas } = getActiveCurve(integradoMatch?.alojamentoDate, integradoMatch?.status, tipoLote, integradoMatch?.fechamentoDate, undefined, undefined, dateStr.split('/').reverse().join('-'));
 
     visits.push({
       id: `v_${crypto.randomUUID()}`,

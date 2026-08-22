@@ -942,12 +942,38 @@ export const growthCurvesMisto: CurveVersion[] = [
   }
 ];
 
-export const getActiveCurve = (alojamentoDate?: string, status?: string, tipoLote?: string, fechamentoDate?: string, empresaConfig?: any) => {
+export const getActiveCurve = (alojamentoDate?: string, status?: string, tipoLote?: string, fechamentoDate?: string, empresaConfig?: any, curvaId?: string, visitDate?: string) => {
   if (empresaConfig?.curva_desempenho && Array.isArray(empresaConfig.curva_desempenho) && empresaConfig.curva_desempenho.length > 0) {
-    return { curve: empresaConfig.curva_desempenho, metas: defaultMetas }; // Assuming default metas for now if not overridden
+    if ('dia' in empresaConfig.curva_desempenho[0]) {
+      // Legacy flat array structure
+      return { id: 'legacy', curve: empresaConfig.curva_desempenho, metas: defaultMetas };
+    } else {
+      // New CurveConfig structure
+      const configs = empresaConfig.curva_desempenho;
+      if (curvaId) {
+        const found = configs.find((c: any) => c.id === curvaId);
+        if (found) return found;
+      }
+      
+      const referenceDate = visitDate || fechamentoDate || alojamentoDate || '2000-01-01';
+      // Filter by tipoLote (defaulting to Misto if not specified in config)
+      const matchingLote = configs.filter((c: any) => (c.tipoLote || 'Misto') === (tipoLote || 'Misto'));
+      const listToSearch = matchingLote.length > 0 ? matchingLote : configs;
+      
+      // Sort by effectiveDate ASC
+      const sorted = [...listToSearch].sort((a: any, b: any) => a.dataVigencia.localeCompare(b.dataVigencia));
+      
+      let selected = sorted[0];
+      for (const cv of sorted) {
+        if (referenceDate >= cv.dataVigencia) {
+          selected = cv;
+        }
+      }
+      return selected || { id: 'default', curve: growthCurvesMisto[growthCurvesMisto.length - 1].curve, metas: defaultMetas };
+    }
   }
 
-  if (tipoLote === 'Fêmea') return { curve: growthCurveFemea, metas: defaultMetasFemea };
+  if (tipoLote === 'Fêmea') return { id: 'legacy_femea', curve: growthCurveFemea, metas: defaultMetasFemea };
   
   if (status === 'Em andamento') {
     return growthCurvesMisto[growthCurvesMisto.length - 1];
@@ -1061,19 +1087,20 @@ export const defaultMetasFemea = {
   metaAcumulada: 166.29
 };
 
-export const getExpectedPerformance = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string, empresaConfig?: any) => {
-  const { curve } = getActiveCurve(alojamentoDate, status, tipoLote, fechamentoDate, empresaConfig);
+export const getExpectedPerformance = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string, empresaConfig?: any, curvaId?: string, visitDate?: string) => {
+  const activeCurveInfo = getActiveCurve(alojamentoDate, status, tipoLote, fechamentoDate, empresaConfig, curvaId, visitDate);
   
-  let currentWeight = (pesoAloj && Number(pesoAloj) > 0) ? Number(pesoAloj) : curve[0].pesoInicial;
+  let currentWeight = (pesoAloj && Number(pesoAloj) > 0) ? Number(pesoAloj) : activeCurveInfo.curve[0].pesoInicial;
   let totalConsumo = 0;
   
   // Calculate offset if tipo_calculo_curva is PESO_ALOJAMENTO
   let offsetDays = 0;
-  if (empresaConfig?.tipo_calculo_curva === 'PESO_ALOJAMENTO' && pesoAloj && Number(pesoAloj) > 0) {
+  const tipoCalculo = activeCurveInfo.tipoCalculo || empresaConfig?.tipo_calculo_curva;
+  if (tipoCalculo === 'PESO_ALOJAMENTO' && pesoAloj && Number(pesoAloj) > 0) {
     // Find the day in the curve where pesoInicial is closest to pesoAloj
     // (Assuming curve is sorted by day)
-    for (let i = 0; i < curve.length; i++) {
-      if (curve[i].pesoInicial >= Number(pesoAloj)) {
+    for (let i = 0; i < activeCurveInfo.curve.length; i++) {
+      if (activeCurveInfo.curve[i].pesoInicial >= Number(pesoAloj)) {
         offsetDays = i;
         break;
       }
@@ -1081,9 +1108,9 @@ export const getExpectedPerformance = (idade: number, tipoLote?: 'Misto' | 'Fêm
   }
   
   for (let d = 0; d < idade; d++) {
-    let point = curve.find((p: any) => p.dia === (d + 1 + offsetDays));
+    let point = activeCurveInfo.curve.find((p: any) => p.dia === (d + 1 + offsetDays));
     if (!point) {
-      point = curve[curve.length - 1];
+      point = activeCurveInfo.curve[activeCurveInfo.curve.length - 1];
     }
     totalConsumo += point.cmd;
     currentWeight += point.gpd;
@@ -1095,12 +1122,12 @@ export const getExpectedPerformance = (idade: number, tipoLote?: 'Misto' | 'Fêm
   };
 };
 
-export const getExpectedConsumption = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string, empresaConfig?: any): number => {
-  return getExpectedPerformance(idade, tipoLote, pesoAloj, alojamentoDate, status, fechamentoDate, empresaConfig).expectedConsumption;
+export const getExpectedConsumption = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string, empresaConfig?: any, curvaId?: string, visitDate?: string): number => {
+  return getExpectedPerformance(idade, tipoLote, pesoAloj, alojamentoDate, status, fechamentoDate, empresaConfig, curvaId, visitDate).expectedConsumption;
 };
 
-export const getExpectedWeight = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string, empresaConfig?: any): number => {
-  return getExpectedPerformance(idade, tipoLote, pesoAloj, alojamentoDate, status, fechamentoDate, empresaConfig).expectedWeight;
+export const getExpectedWeight = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string, empresaConfig?: any, curvaId?: string, visitDate?: string): number => {
+  return getExpectedPerformance(idade, tipoLote, pesoAloj, alojamentoDate, status, fechamentoDate, empresaConfig, curvaId, visitDate).expectedWeight;
 };
 
 // Parser

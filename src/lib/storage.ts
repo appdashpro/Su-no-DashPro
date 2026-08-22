@@ -12,7 +12,7 @@ export const OFFLINE_EDIT_INTEGRADO_QUEUE = "suino_dashpro_offline_edit_integrad
 export const CONFIGS_KEY = "suino_dashpro_empresa_configs";
 export const getEmpresaConfigsLocal = () => { try { const data = safeStorage.getItem(CONFIGS_KEY); return data ? JSON.parse(data) : []; } catch { return []; } };
 
-const EMPRESA_ID = '00000000-0000-0000-0000-000000000001';
+const EMPRESA_ID = '00000000-0000-0000-0000-000000000000';
 
 const getIntegradosLocal = (): Integrado[] => {
   try {
@@ -394,7 +394,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
         const activeCurveInfo = getActiveCurve(
           lote?.data_alojamento,
           lote?.status === 'Ativo' ? 'Em andamento' : 'Fechado',
-          lote?.tipo_lote as any
+          lote?.tipo_lote as any, lote?.data_abate || null, null, v.curva_consumo_id, v.data_visita
         );
         const metas = activeCurveInfo.metas;
 
@@ -418,6 +418,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
           })(),
           sobraSiloKg: Number(v.sobra_silo_kg) || 0,
           descartesPeriodo: Number(v.descartes_periodo) || 0,
+          curva_consumo_id: v.curva_consumo_id || null,
           pesoAmostradoKg: (() => {
             const vPeso = Number(v.peso_amostrado_kg);
             if (!isNaN(vPeso) && vPeso > 0) return vPeso;
@@ -672,7 +673,8 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
           descartes_periodo: Math.round(v.descartesPeriodo || 0),
           pontuacao_sanitaria: v.pontuacaoSanitaria?.toString() || null,
           recomendacoes: v.recomendacao || null,
-          tecnico_nome: v.colaborador || null
+          tecnico_nome: v.colaborador || null,
+          curva_consumo_id: v.curva_consumo_id || null
        };
 
        const { error: errVisita } = await supabase.from('visitas').upsert(visitaRow);

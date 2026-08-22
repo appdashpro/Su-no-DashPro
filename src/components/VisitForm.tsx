@@ -21,7 +21,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  const [formData, setFormData] = useState<Partial<Visit> & { alojamentoDate?: string, integradoNome?: string, empresaId?: string }>(() => {
  if (initialData) {
  const integrado = integrados.find(i => i.id === initialData.integradoId);
- const { metas } = getActiveCurve(integrado?.alojamentoDate, integrado?.status, initialData.tipoLote || 'Misto', integrado?.fechamentoDate);
+ const { metas } = getActiveCurve(integrado?.alojamentoDate, integrado?.status, initialData.tipoLote || 'Misto', integrado?.fechamentoDate, undefined, undefined, initialData.date);
  const initialPesoAmostrado = (initialData.pesoAmostradoKg !== undefined && Number(initialData.pesoAmostradoKg) > 0)
    ? Number(initialData.pesoAmostradoKg)
    : (initialData.tratamentos?.find(t => t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)?.pesoEstimadoKg);
@@ -99,6 +99,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  onSave({
  ...visitData,
  id: initialData ? initialData.id : crypto.randomUUID(),
+ curva_consumo_id: activeCurve?.id,
  integradoId,
  idade: Number(visitData.idade) || 0,
  consumoAcumuladoReal: visitData.consumoAcumuladoReal !== undefined && visitData.consumoAcumuladoReal !== null && String(visitData.consumoAcumuladoReal).trim() !== '' ? Number(visitData.consumoAcumuladoReal) : undefined,
@@ -152,7 +153,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  if (name === 'tipoLote' || name === 'alojamentoDate') {
  const activeTipo = name === 'tipoLote' ? value : formData.tipoLote;
  const activeAlojDate = name === 'alojamentoDate' ? value : formData.alojamentoDate;
- const { metas } = getActiveCurve(activeAlojDate, undefined, activeTipo);
+ const { metas } = getActiveCurve(activeAlojDate, undefined, activeTipo, undefined, undefined, undefined, formData.date);
  updates = {
  ...updates,
  ...metas
@@ -279,8 +280,10 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  const configs = getEmpresaConfigsLocal();
   const currentConfig = configs.find((c: any) => c.empresa_id === (formData.empresaId || integrado?.empresaId));
   const currentIdade = Number(formData.idade) || 0;
- const expectedConsumption = currentIdade > 0 ? getExpectedConsumption(currentIdade, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig) : null;
- const expectedWeight = currentIdade > 0 ? getExpectedWeight(currentIdade, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig) : null;
+ const activeCurve = getActiveCurve(integrado?.alojamentoDate, integrado?.status, formData.tipoLote as any, integrado?.fechamentoDate, currentConfig, initialData?.curva_consumo_id, formData.date);
+ const resolvedCurvaId = activeCurve?.id;
+ const expectedConsumption = currentIdade > 0 ? getExpectedConsumption(currentIdade, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig, resolvedCurvaId, formData.date) : null;
+ const expectedWeight = currentIdade > 0 ? getExpectedWeight(currentIdade, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig, resolvedCurvaId, formData.date) : null;
 
   let racaoRecomendada = '';
   if (currentConfig?.programa_alimentar && Array.isArray(currentConfig.programa_alimentar) && currentConfig.programa_alimentar.length > 0) {
@@ -296,7 +299,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  for (let d = 1; d <= maxDays; d++) {
  data.push({
  dia: d,
- consumoAcumulado: getExpectedConsumption(d, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate)
+ consumoAcumulado: getExpectedConsumption(d, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, undefined, undefined, formData.date)
  });
  }
  return data;
@@ -313,7 +316,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  let prevVisitInfo = null;
  if (!initialData && prevVisit) {
  const prevIdade = prevVisit.idade || 0;
- const prevExpected = getExpectedConsumption(prevIdade, prevVisit.tipoLote || formData.tipoLote as any, prevVisit.pesoAloj || formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate);
+ const prevExpected = getExpectedConsumption(prevIdade, prevVisit.tipoLote || formData.tipoLote as any, prevVisit.pesoAloj || formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, undefined, undefined, prevVisit.date);
  const prevReal = prevVisit.consumoAcumuladoReal;
  
  let diffInfo = '';

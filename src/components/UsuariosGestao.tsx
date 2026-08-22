@@ -26,6 +26,7 @@ import {
 import { UserProfile, PapelUsuario, Integrado, getRoleLabel, Empresa } from '../types';
 import { supabase } from '../lib/supabase';
 import { fetchAllUsers, saveUserWithPermissions, deleteUser, MASTER_EMAILS } from '../lib/auth';
+import { generateNextEmpresaId } from '../lib/idGenerator';
 
 interface UsuariosGestaoProps {
   integrados: Integrado[];
@@ -156,7 +157,7 @@ export function UsuariosGestao({ integrados, currentUser, onImpersonate }: Usuar
     setSavingEmpresa(true);
     setError(null);
     try {
-      const newId = `emp_${Date.now()}`;
+      const newId = await generateNextEmpresaId();
       const { data, error: err } = await supabase
         .from('empresas')
         .insert([{

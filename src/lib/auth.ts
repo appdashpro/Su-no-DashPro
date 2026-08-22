@@ -340,7 +340,7 @@ export async function saveUserWithPermissions(
         email: emailNorm,
         nome: user.nome,
         papel: user.papel,
-        empresa_id: user.empresa_id || '00000000-0000-0000-0000-000000000001',
+        empresa_id: user.empresa_id || '00000000-0000-0000-0000-000000000000',
         integrado_padrao_id: updatedUser.integrado_padrao_id || null,
         clientes_permitidos: allowedIntegradoIds,
         ativo: true,

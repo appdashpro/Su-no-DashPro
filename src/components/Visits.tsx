@@ -169,8 +169,8 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  </tr>
  ) : filteredVisits.map((v) => {
  const integrado = getIntegradoForVisit(v);
- const expected = getExpectedConsumption(v.idade, v.tipoLote, v.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate);
- const activeCurveInfo = getActiveCurve(integrado?.alojamentoDate, integrado?.status, v.tipoLote, integrado?.fechamentoDate);
+ const expected = getExpectedConsumption(v.idade, v.tipoLote, v.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, undefined, undefined, v.date);
+ const activeCurveInfo = getActiveCurve(integrado?.alojamentoDate, integrado?.status, v.tipoLote, integrado?.fechamentoDate, undefined, undefined, v.date);
  const metas = activeCurveInfo.metas;
 
  const alojados = Number(v.animaisAlojados) || 0;

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Empresa, EmpresaConfig, UserProfile } from '../types';
+import { Empresa, EmpresaConfig, UserProfile, CurveConfig } from '../types';
 import { Save, AlertCircle, Plus, Trash2, Settings, X, RotateCcw } from 'lucide-react';
-import { DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE } from '../data';
+import { DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE, growthCurvesMisto, growthCurveFemea, defaultMetas, defaultMetasFemea } from '../data';
 
 interface EmpresaConfigGestaoProps {
   currentUser: UserProfile | null;
@@ -25,7 +25,7 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
 
   const [newMedicamento, setNewMedicamento] = useState('');
   const [newCausa, setNewCausa] = useState('');
-
+      
   useEffect(() => {
     fetchEmpresas();
   }, []);
@@ -81,12 +81,15 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
         setMetaMortalidade(data.meta_mortalidade || 0);
         setMedicamentos((data.medicamentos_permitidos && data.medicamentos_permitidos.length > 0) ? data.medicamentos_permitidos : DEFAULT_MEDICAMENTOS_PERMITIDOS);
         setCausas((data.causas_mortalidade && data.causas_mortalidade.length > 0) ? data.causas_mortalidade : DEFAULT_CAUSAS_MORTALIDADE);
+        
+
       } else {
         setConfig(null);
         setTipoCalculo('DIA_UM');
         setMetaMortalidade(0);
         setMedicamentos(DEFAULT_MEDICAMENTOS_PERMITIDOS);
         setCausas(DEFAULT_CAUSAS_MORTALIDADE);
+        
       }
     } catch (err: any) {
       console.error(err);
@@ -238,6 +241,7 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
                   </div>
                 </div>
               </div>
+
 
               {/* Listas Permitidas */}
               <div className="bg-slate-50/50 p-6 rounded-xl border border-slate-200/80">

@@ -128,7 +128,7 @@ export function calculatePriority(integrado: Integrado, allVisits: Visit[]): Pri
       }
     }
     
-    const expected = getExpectedConsumption(feedAge, visitWithFeed.tipoLote, visitWithFeed.pesoAloj, integrado.alojamentoDate, integrado.status, integrado.fechamentoDate);
+    const expected = getExpectedConsumption(feedAge, visitWithFeed.tipoLote, visitWithFeed.pesoAloj, integrado.alojamentoDate, integrado.status, integrado.fechamentoDate, undefined, undefined, visitWithFeed.date);
     if (expected !== undefined && expected !== null && expected > 0) {
        feedDeviation = Number(visitWithFeed.consumoAcumuladoReal) - expected;
     }
