@@ -74,7 +74,7 @@ export const storage = {
       }
       
       // Lock check: abort sync if user is currently editing a form
-      if (typeof localStorage !== 'undefined' && safeStorage.getItem('EDITING_LOCK') === 'true') {
+      if (typeof window !== 'undefined' && safeStorage.getItem('EDITING_LOCK') === 'true') {
         console.warn('Sync aborted because a form is currently being edited.');
         return false;
       }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Empresa, EmpresaConfig, UserProfile, CurveConfig } from '../types';
 import { Save, AlertCircle, Plus, Trash2, Settings, X, RotateCcw } from 'lucide-react';
-import { DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE, growthCurvesMisto, growthCurveFemea, defaultMetas, defaultMetasFemea } from '../data';
+import { DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE, DEFAULT_TECNICOS, growthCurvesMisto, growthCurveFemea, defaultMetas, defaultMetasFemea } from '../data';
 
 interface EmpresaConfigGestaoProps {
   currentUser: UserProfile | null;
@@ -22,6 +22,8 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
   const [metaMortalidade, setMetaMortalidade] = useState<number>(0);
   const [medicamentos, setMedicamentos] = useState<string[]>([]);
   const [causas, setCausas] = useState<string[]>([]);
+  const [tecnicos, setTecnicos] = useState<string[]>([]);
+  const [newTecnico, setNewTecnico] = useState('');
 
   const [newMedicamento, setNewMedicamento] = useState('');
   const [newCausa, setNewCausa] = useState('');
@@ -82,6 +84,11 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
         setMedicamentos((data.medicamentos_permitidos && data.medicamentos_permitidos.length > 0) ? data.medicamentos_permitidos : DEFAULT_MEDICAMENTOS_PERMITIDOS);
         setCausas((data.causas_mortalidade && data.causas_mortalidade.length > 0) ? data.causas_mortalidade : DEFAULT_CAUSAS_MORTALIDADE);
         
+        const emp = empresas.find(e => e.id === selectedEmpresaId);
+        const isPastre = emp?.nome ? emp.nome.toLowerCase().includes('pastre') : false;
+        setTecnicos((data.tecnicos !== undefined && data.tecnicos !== null) ? data.tecnicos : (isPastre ? DEFAULT_TECNICOS : []));
+  
+        
 
       } else {
         setConfig(null);
@@ -89,6 +96,11 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
         setMetaMortalidade(0);
         setMedicamentos(DEFAULT_MEDICAMENTOS_PERMITIDOS);
         setCausas(DEFAULT_CAUSAS_MORTALIDADE);
+        
+        const emp = empresas.find(e => e.id === selectedEmpresaId);
+        const isPastre = emp?.nome ? emp.nome.toLowerCase().includes('pastre') : false;
+        setTecnicos(isPastre ? DEFAULT_TECNICOS : []);
+  
         
       }
     } catch (err: any) {
@@ -111,6 +123,7 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
       meta_mortalidade: metaMortalidade,
       medicamentos_permitidos: medicamentos,
       causas_mortalidade: causas,
+      tecnicos: tecnicos,
       // If config exists, preserve its JSON fields, otherwise default
       curva_desempenho: config?.curva_desempenho || [],
       programa_alimentar: config?.programa_alimentar || []
@@ -154,13 +167,19 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
     setCausas(causas.filter(causa => causa !== c));
   };
 
-  if (!currentUser || !['MASTER', 'SUPER_ADMIN'].includes(currentUser.papel)) {
-    return (
-      <div className="p-8 text-center text-red-500 bg-red-50/50 rounded-xl m-4 border border-red-100">
-        Você não tem permissão para acessar esta área.
-      </div>
-    );
-  }
+  const addTecnico = () => {
+    if (newTecnico.trim() && !tecnicos.includes(newTecnico.trim())) {
+      setTecnicos([...tecnicos, newTecnico.trim()]);
+      setNewTecnico('');
+    }
+  };
+
+  const removeTecnico = (tecnico: string) => {
+    setTecnicos(prev => prev.filter(t => t !== tecnico));
+  };
+
+  if (!currentUser) return null;
+  const isMaster = ['MASTER', 'SUPER_ADMIN'].includes(currentUser.papel);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
@@ -180,6 +199,7 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
           <select
             value={selectedEmpresaId}
             onChange={(e) => setSelectedEmpresaId(e.target.value)}
+            disabled={!isMaster && empresas.length <= 1}
             className="w-full sm:w-96 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
           >
             {empresas.map(emp => (
@@ -256,6 +276,7 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
                     <button
                       type="button"
                       onClick={() => setMedicamentos([...DEFAULT_MEDICAMENTOS_PERMITIDOS])}
+                  disabled={!isMaster}
                       className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded border border-emerald-200"
                     >
                       <RotateCcw className="w-3 h-3" /> Restaurar Lista Padrão
@@ -266,6 +287,7 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
                       type="text"
                       value={newMedicamento}
                       onChange={(e) => setNewMedicamento(e.target.value)}
+                      disabled={!isMaster}
                       onKeyDown={(e) => e.key === 'Enter' && addMedicamento()}
                       placeholder="Nome do princípio ativo / medicamento"
                       className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -281,9 +303,9 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
                     {medicamentos.map(med => (
                       <span key={med} className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-50 text-emerald-800 rounded-full text-xs font-medium border border-emerald-200 shadow-sm">
                         {med}
-                        <button onClick={() => removeMedicamento(med)} className="hover:text-red-500 ml-1 text-slate-400">
+                        {isMaster && (<button onClick={() => removeMedicamento(med)} className="hover:text-red-500 ml-1 text-slate-400">
                           <X className="w-3 h-3" />
-                        </button>
+                        </button>)}
                       </span>
                     ))}
                     {medicamentos.length === 0 && <span className="text-sm text-slate-400 italic">Nenhum medicamento na lista.</span>}
@@ -299,6 +321,7 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
                     <button
                       type="button"
                       onClick={() => setCausas([...DEFAULT_CAUSAS_MORTALIDADE])}
+                  disabled={!isMaster}
                       className="text-xs font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1 bg-orange-50 px-2 py-1 rounded border border-orange-200"
                     >
                       <RotateCcw className="w-3 h-3" /> Restaurar Lista Padrão
@@ -309,6 +332,7 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
                       type="text"
                       value={newCausa}
                       onChange={(e) => setNewCausa(e.target.value)}
+                      disabled={!isMaster}
                       onKeyDown={(e) => e.key === 'Enter' && addCausa()}
                       placeholder="Ex: Pneumonia / doença respiratória"
                       className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -324,12 +348,64 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
                     {causas.map(causa => (
                       <span key={causa} className="inline-flex items-center gap-1 px-3 py-1 bg-orange-50 text-orange-800 rounded-full text-xs font-medium border border-orange-200 shadow-sm">
                         {causa}
-                        <button onClick={() => removeCausa(causa)} className="hover:text-red-500 ml-1 text-slate-400">
+                        {isMaster && (<button onClick={() => removeCausa(causa)} className="hover:text-red-500 ml-1 text-slate-400">
                           <X className="w-3 h-3" />
-                        </button>
+                        </button>)}
                       </span>
                     ))}
                     {causas.length === 0 && <span className="text-sm text-slate-400 italic">Nenhuma causa na lista.</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+              <div className="pt-6 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-700">Técnicos / Colaboradores</h3>
+                  <p className="text-xs text-slate-500">Nomes disponíveis para seleção nos lançamentos de visita.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTecnicos([...DEFAULT_TECNICOS])}
+                  className="text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+                >
+                  Restaurar Padrões
+                </button>
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="md:w-1/3">
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={newTecnico}
+                      onChange={e => setNewTecnico(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTecnico())}
+                      placeholder="Novo técnico..."
+                      className="flex-1 border border-slate-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={addTecnico}
+                      disabled={!isMaster || !newTecnico.trim()}
+                      className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 disabled:opacity-50 transition-colors border border-slate-200"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="md:w-2/3">
+                  <div className="flex flex-wrap gap-2 max-h-60 overflow-y-auto p-2 bg-white rounded-lg border border-slate-200">
+                    {tecnicos.map(tecnico => (
+                      <span key={tecnico} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-800 rounded-full text-xs font-medium border border-blue-200 shadow-sm">
+                        {tecnico}
+                        {isMaster && (<button onClick={() => removeTecnico(tecnico)} className="hover:text-red-500 ml-1 text-slate-400">
+                          <X className="w-3 h-3" />
+                        </button>)}
+                      </span>
+                    ))}
+                    {tecnicos.length === 0 && <span className="text-sm text-slate-400 italic">Nenhum técnico na lista.</span>}
                   </div>
                 </div>
               </div>

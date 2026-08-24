@@ -29,7 +29,7 @@ export function Sidebar({ currentTab, setCurrentTab, onStartTutorial, userProfil
     { id: 'curva', label: 'Curvas de Consumo', icon: LineChart, show: true },
     { id: 'importar', label: 'Importar Dados', icon: ClipboardList, show: isMaster || isNutron },
     { id: 'usuarios', label: 'Equipe & Clientes', icon: ShieldCheck, show: isMaster },
-    { id: 'parametros', label: 'Parâmetros por Cliente', icon: Settings, show: isMaster },
+    { id: 'parametros', label: 'Parâmetros por Cliente', icon: Settings, show: isMaster || isNutron || isClientTech },
   ].filter(item => item.show);
 
   const getBadgeStyle = () => {

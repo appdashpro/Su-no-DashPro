@@ -1,12 +1,13 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { fileURLToPath, URL } from 'node:url';
 import {defineConfig} from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig(({ command }) => ({
+export default defineConfig({
   build: {
-    chunkSizeWarningLimit: 1500,
+    outDir: 'dist',
+    chunkSizeWarningLimit: 100000
   },
   plugins: [
     react(),
@@ -35,7 +36,7 @@ export default defineConfig(({ command }) => ({
         ]
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 5000000,
+        maximumFileSizeToCacheInBytes: 15000000,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
         runtimeCaching: [
           {
@@ -69,7 +70,7 @@ export default defineConfig(({ command }) => ({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, '.'),
+      '@': fileURLToPath(new URL('./', import.meta.url)),
     },
   },
   server: {
@@ -78,4 +79,4 @@ export default defineConfig(({ command }) => ({
     hmr: process.env.DISABLE_HMR !== 'true',
     watch: process.env.DISABLE_HMR === 'true' ? null : {},
   },
-}));
+});

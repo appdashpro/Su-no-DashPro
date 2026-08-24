@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Visit, Integrado } from '../types';
 import { getExpectedConsumption, getActiveCurve } from '../data';
-import { X } from 'lucide-react';
+import { getEmpresaConfigsLocal } from '../lib/storage';
+import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { ComposedChart, Line, Area, Bar, BarChart, ReferenceLine, Label, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Cell } from 'recharts';
 
 interface IntegradoDetailsModalProps {
   integradoId: string;
@@ -14,7 +15,8 @@ interface IntegradoDetailsModalProps {
 
 export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose }: IntegradoDetailsModalProps) {
   const [showAdherenceInfo, setShowAdherenceInfo] = useState(false);
-  const [activeTab, setActiveTab] = useState<'geral' | 'tratamentos'>('geral');
+  const [showDiagInfo, setShowDiagInfo] = useState(false);
+  const [activeTab, setActiveTab] = useState<'geral' | 'tratamentos' | 'diagnostico'>('geral');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -33,6 +35,10 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
   const selectedIntegradoDetails = integradoId;
 
   const lote = integrados.find(i => i.id === integradoId);
+  const configs = getEmpresaConfigsLocal();
+  const currentConfig = configs.find((c: any) => c.empresa_id === lote?.empresaId);
+  const finalMetaMortalidade = currentConfig?.meta_mortalidade || 0.5;
+
   const loteVisits = visits.filter(v => v.integradoId === integradoId).sort((a, b) => (a.idade || 0) - (b.idade || 0));
   
   const maxIdade = Math.max(105, ...(loteVisits.map(v => v.idade || 0)));
@@ -47,6 +53,68 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
         real: (visit && visit.consumoAcumuladoReal) ? Number(visit.consumoAcumuladoReal) : null
      });
   }
+
+  const activeCurveInfo = getActiveCurve(lote?.alojamentoDate, lote?.status, loteVisits[0]?.tipoLote, lote?.fechamentoDate, undefined, loteVisits[0]?.curva_consumo_id, loteVisits[0]?.date) || {};
+  const metas = activeCurveInfo?.metas;
+  const phaseMilestones = [];
+  if (metas) {
+    let accum = 0;
+    const phaseDefs = [
+       { key: 'metaAlojamento', label: 'Aloj.' },
+       { key: 'metaCrescimento1', label: 'Cr. 1' },
+       { key: 'metaCrescimento2', label: 'Cr. 2' },
+       { key: 'metaCrescimento3', label: 'Cr. 3' },
+       { key: 'metaTerminacao1', label: 'Te. 1' },
+       { key: 'metaTerminacao2', label: 'Te. 2' }
+    ];
+    let phaseIdx = 0;
+    accum += metas[phaseDefs[phaseIdx].key] || 0;
+    for (let i = 0; i < chartData.length; i++) {
+      if (phaseIdx >= phaseDefs.length) break;
+      if (chartData[i].esperado !== null && chartData[i].esperado! >= accum) {
+         phaseMilestones.push({
+            idade: chartData[i].idade,
+            label: phaseDefs[phaseIdx].label
+         });
+         phaseIdx++;
+         if (phaseIdx < phaseDefs.length) {
+            accum += metas[phaseDefs[phaseIdx].key] || 0;
+         }
+      }
+    }
+  }
+  
+  // Prepare mortality chart data
+  const mortalityData = [];
+  for (let d = 1; d <= maxIdade; d++) {
+    const visit = loteVisits.find(v => v.idade === d);
+    const proportionalMeta = Number(((d / maxIdade) * finalMetaMortalidade).toFixed(2));
+    if (visit) {
+      const alojados = visit.animaisAlojados || loteVisits[0]?.animaisAlojados || 1;
+      const mortos = visit.animaisMortos || 0;
+      const descartes = visit.descartesPeriodo || 0;
+      const mortosPerc = Number(((mortos / alojados) * 100).toFixed(2));
+      const descartesPerc = Number(((descartes / alojados) * 100).toFixed(2));
+      mortalityData.push({
+        idade: d,
+        mortos: mortosPerc,
+        descartes: descartesPerc,
+        total: Number((mortosPerc + descartesPerc).toFixed(2)),
+        meta: proportionalMeta,
+        date: visit.date
+      });
+    } else {
+      mortalityData.push({
+        idade: d,
+        mortos: null,
+        descartes: null,
+        total: null,
+        meta: proportionalMeta,
+        date: null
+      });
+    }
+  }
+
 
 
 
@@ -68,16 +136,19 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
 
   const curveAccuracy = validAdherencePoints > 0 ? Math.round(totalAdherence / validAdherencePoints) : null;
   
-  let accuracyColorClass = 'bg-blue-100 text-blue-700 border-blue-200';
-  if (realVisits.length > 0) {
-    const lastVisit = realVisits[realVisits.length - 1];
-    if (lastVisit.esperado && lastVisit.real !== null && lastVisit.real !== undefined) {
-      const finalDiff = lastVisit.real - lastVisit.esperado;
-      if (finalDiff > 5) {
-        accuracyColorClass = 'bg-red-100 text-red-700 border-red-200';
-      } else if (finalDiff < -5) {
-        accuracyColorClass = 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      }
+  let accuracyColorClass = 'bg-slate-100 text-slate-700 border-slate-200';
+  let accuracyStatus = '';
+  
+  if (curveAccuracy !== null) {
+    if (curveAccuracy >= 95) {
+      accuracyColorClass = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      accuracyStatus = 'Excelente';
+    } else if (curveAccuracy >= 90) {
+      accuracyColorClass = 'bg-amber-100 text-amber-700 border-amber-200';
+      accuracyStatus = 'Atenção';
+    } else {
+      accuracyColorClass = 'bg-red-100 text-red-700 border-red-200';
+      accuracyStatus = 'Crítico';
     }
   }
 
@@ -121,80 +192,233 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
               >
                 Tratamentos Realizados
               </button>
+              <button 
+                onClick={() => setActiveTab('diagnostico')}
+                className={`py-3 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'diagnostico' ? 'border-blue-500 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                Diagnóstico Sanitário
+              </button>
             </div>
 
             <div className="p-6 overflow-y-auto">
               {activeTab === 'geral' && (
               <>
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                  <div className="text-xs text-slate-500 uppercase font-semibold mb-1">Status</div>
-                  <div className="text-sm font-medium text-slate-700">
-                    {integrados.find(i => i.id === selectedIntegradoDetails)?.status || 'Desconhecido'}
-                  </div>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                  <div className="text-xs text-slate-500 uppercase font-semibold mb-1">Total de Visitas</div>
-                  <div className="text-sm font-medium text-slate-700">
-                    {visits.filter(v => v.integradoId === selectedIntegradoDetails).length}
-                  </div>
-                </div>
-              </div>
-              
               {(() => {
-                const loteVisits = visits.filter(v => v.integradoId === selectedIntegradoDetails)
-                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                const latestVisit = loteVisits.length > 0 ? loteVisits[0] : null;
-                const phases = [
-                  { id: 'Alojamento', label: 'Alojamento', metaKey: 'metaAlojamento', consKey: 'consumoAlojamento' },
-                  { id: 'Crescimento1', label: 'Crescimento 1', metaKey: 'metaCrescimento1', consKey: 'consumoCrescimento1' },
-                  { id: 'Crescimento2', label: 'Crescimento 2', metaKey: 'metaCrescimento2', consKey: 'consumoCrescimento2' },
-                  { id: 'Crescimento3', label: 'Crescimento 3', metaKey: 'metaCrescimento3', consKey: 'consumoCrescimento3' },
-                  { id: 'Terminacao1', label: 'Terminação 1', metaKey: 'metaTerminacao1', consKey: 'consumoTerminacao1' },
-                  { id: 'Terminacao2', label: 'Terminação 2', metaKey: 'metaTerminacao2', consKey: 'consumoTerminacao2' },
-                ];
-                
+                const loteVisitsAsc = visits.filter(v => v.integradoId === selectedIntegradoDetails)
+                  .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                const latestVisit = loteVisitsAsc.length > 0 ? loteVisitsAsc[loteVisitsAsc.length - 1] : null;
+                const totalRacao = latestVisit?.volumeTotalCargas || 0;
+                const alojados = latestVisit?.animaisAlojados || loteVisitsAsc[0]?.animaisAlojados || 0;
+                const mortos = latestVisit?.animaisMortos || 0;
+                const descartes = latestVisit?.descartesPeriodo || 0;
+                const vivos = Math.max(0, alojados - mortos - descartes);
+
+                let mortPercent = 0;
+                if (latestVisit?.animaisMortos && alojados > 0) {
+                   mortPercent = (latestVisit.animaisMortos / alojados) * 100;
+                } else if (latestVisit?.mortalidade) {
+                   mortPercent = latestVisit.mortalidade;
+                }
+                const idade = latestVisit?.idade || 0;
+
+                const consumoRealCab = latestVisit?.consumoAcumuladoReal !== undefined && latestVisit?.consumoAcumuladoReal !== null
+                  ? Number(latestVisit.consumoAcumuladoReal)
+                  : (totalRacao > 0 && vivos > 0 ? Number((totalRacao / vivos).toFixed(2)) : undefined);
+
+                const consumoEsperado = (idade > 0 && latestVisit)
+                  ? getExpectedConsumption(idade, latestVisit.tipoLote, latestVisit.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, undefined, undefined, latestVisit.date)
+                  : null;
+
+                const diffConsumo = (consumoRealCab !== undefined && consumoEsperado !== null)
+                  ? Number((consumoRealCab - consumoEsperado).toFixed(2))
+                  : null;
+
+                const getFase = (dias: number) => {
+                  if (dias <= 0) return 'Alojamento';
+                  if (dias <= 21) return 'Alojamento (Pré)';
+                  if (dias <= 63) return 'Crescimento';
+                  return 'Terminação';
+                };
+
                 return (
-                  <>
-                    {latestVisit && (
-                      <div className="mb-6">
-                        <h4 className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wider">Consumo por Fase (Última Visita)</h4>
-                        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-                          <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 text-slate-500">
-                              <tr>
-                                <th className="px-4 py-2 font-medium">Fase</th>
-                                <th className="px-4 py-2 font-medium">Meta (kg)</th>
-                                <th className="px-4 py-2 font-medium">Consumo (kg)</th>
-                                <th className="px-4 py-2 font-medium">Desvio (kg)</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {phases.map(phase => {
-                                const meta = (latestVisit as any)[phase.metaKey];
-                                const cons = (latestVisit as any)[phase.consKey];
-                                const diff = (cons && meta) ? Number((cons - meta).toFixed(2)) : null;
-                                return (
-                                  <tr key={phase.id}>
-                                    <td className="px-4 py-2 text-slate-700">{phase.label}</td>
-                                    <td className="px-4 py-2 text-slate-600">{meta ?? '-'}</td>
-                                    <td className={`px-4 py-2 font-medium ${diff !== null && Math.abs(diff) <= 5 ? 'text-blue-600' : diff !== null && diff > 5 ? 'text-red-600' : diff !== null && diff < -5 ? 'text-emerald-600' : 'text-slate-600'}`}>{cons ?? '-'}</td>
-                                    <td className={`px-4 py-2 font-medium ${diff !== null && Math.abs(diff) <= 5 ? 'text-blue-600' : diff !== null && diff > 5 ? 'text-red-600' : diff !== null && diff < -5 ? 'text-emerald-600' : 'text-slate-600'}`}>
-                                      {diff !== null ? (diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2)) : '-'}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <h4 className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wider">Histórico de Visitas</h4>
-                  </>
+                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
+                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                       <div>
+                         <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Consumo Médio (Acum.)</div>
+                         <div className="text-lg font-bold text-slate-800">
+                           {consumoRealCab !== undefined ? `${consumoRealCab.toFixed(1)} kg/cab` : '-'}
+                         </div>
+                       </div>
+                       <div className="mt-2 pt-1.5 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                         <span className="text-slate-500 break-words line-clamp-2" title={consumoEsperado !== null ? `Meta: ${consumoEsperado.toFixed(1)} kg/cab` : ''}>
+                           {consumoEsperado !== null ? `Meta: ${consumoEsperado.toFixed(1)} kg/cab` : 'Sem meta'}
+                         </span>
+                         {diffConsumo !== null && (
+                           <span className={`font-semibold ml-1 shrink-0 ${Math.abs(diffConsumo) <= 1 ? 'text-emerald-600' : diffConsumo > 1 ? 'text-red-600' : 'text-blue-600'}`} title="Diferença p/ Meta">
+                             {diffConsumo > 0 ? `+${diffConsumo.toFixed(1)}` : diffConsumo.toFixed(1)} kg
+                           </span>
+                         )}
+                       </div>
+                     </div>
+
+                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                       <div>
+                         <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Mortalidade Acum.</div>
+                         <div className="text-lg font-bold text-slate-800">{mortPercent > 0 ? `${mortPercent.toFixed(2)}%` : '-'}</div>
+                       </div>
+                       <div className="mt-2 pt-1.5 border-t border-slate-200/60 text-[11px] text-slate-500 break-words line-clamp-2">
+                         {alojados > 0 ? `${vivos.toLocaleString('pt-BR')} vivos (${mortos} mortos)` : 'Sem contagem'}
+                       </div>
+                     </div>
+
+                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                       <div>
+                         <div className="flex justify-between items-center mb-0.5">
+                           <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Aderência</div>
+                           {curveAccuracy !== null && (
+                              <button onClick={() => setShowAdherenceInfo(true)} className="text-[10px] text-blue-600 font-semibold hover:underline">Info</button>
+                           )}
+                         </div>
+                         <div className="flex items-baseline gap-2">
+                           <div className={`text-lg font-bold ${accuracyColorClass.replace('bg-', 'text-').replace('-100', '-600').split(' ')[1] || 'text-slate-800'}`}>
+                             {curveAccuracy !== null ? `${curveAccuracy}%` : '-'}
+                           </div>
+                           {accuracyStatus && (
+                             <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${accuracyColorClass}`}>
+                               {accuracyStatus}
+                             </span>
+                           )}
+                         </div>
+                       </div>
+                       <div className="mt-2 pt-1.5 border-t border-slate-200/60 text-[11px] text-slate-500 break-words line-clamp-2">
+                         Meta: 100% (Consumo vs. Curva)
+                       </div>
+                     </div>
+
+                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                       <div>
+                         <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Idade Atual</div>
+                         <div className="text-lg font-bold text-slate-800">{idade > 0 ? `${idade} dias` : '-'}</div>
+                       </div>
+                       <div className="mt-2 pt-1.5 border-t border-slate-200/60 text-[11px] text-slate-500 font-medium text-slate-600 break-words line-clamp-2">
+                         {lote?.status === 'Fechado' ? 'Encerrado' : getFase(idade)}
+                       </div>
+                     </div>
+                   </div>
                 );
               })()}
+
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-0">Curva de Consumo do Lote (Real vs Meta)</h4>
+                </div>
+                <div className="h-72 w-full bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                      <defs>
+                        <linearGradient id="colorReal" x1="0%" y1="0%" x2="100%" y2="0%">
+                          {realVisits.map((v, index) => {
+                            let color = '#3b82f6';
+                            if (v.esperado !== null && v.esperado !== undefined && v.real !== null && v.real !== undefined) {
+                              const diff = v.real - v.esperado;
+                              if (diff > 5) color = '#ef4444';
+                              else if (diff < -5) color = '#10b981';
+                            }
+                            const offset = maxReal === minReal ? 0 : ((v.idade - minReal) / (maxReal - minReal)) * 100;
+                            return <stop key={index} offset={`${offset}%`} stopColor={color} />;
+                          })}
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      {phaseMilestones.map((pm, i) => (
+                        <ReferenceLine key={i} x={pm.idade} stroke="#cbd5e1" strokeDasharray="3 3">
+                           <Label value={pm.label} position="insideTopRight" offset={10} fill="#94a3b8" fontSize={10} />
+                        </ReferenceLine>
+                      ))}
+                      <XAxis dataKey="idade" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} minTickGap={20} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        itemStyle={{ fontSize: '12px', fontWeight: 600 }}
+                        labelStyle={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}
+                        formatter={(value, name, props) => {
+                          if (name === "Consumo Real" && props.payload.esperado) {
+                             const diff = (Number(value) - Number(props.payload.esperado)).toFixed(2);
+                             return [`${value} kg (${Number(diff) > 0 ? '+' : ''}${diff} kg)`, name];
+                          }
+                          return [`${value} kg`, name];
+                        }}
+                        labelFormatter={(label) => `Idade: ${label} dias`}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '12px' }} />
+                      <Area type="monotone" dataKey="real" stroke="none" fill="url(#colorReal)" fillOpacity={0.15} connectNulls={true} />
+                      <Line type="monotone" dataKey="esperado" name="Consumo Esperado" stroke="#94a3b8" strokeWidth={2} dot={false} strokeDasharray="5 5" />
+                      <Line 
+                        type="monotone" 
+                        dataKey="real" 
+                        name="Consumo Real" 
+                        stroke="url(#colorReal)" 
+                        strokeWidth={2} 
+                        connectNulls={true}
+                        activeDot={{ r: 6, strokeWidth: 0 }}
+                        dot={(props) => {
+                          const { cx, cy, payload, value } = props;
+                          if (value === null || value === undefined) return null;
+                          let dotColor = '#3b82f6'; 
+                          if (payload.esperado !== null && payload.esperado !== undefined) {
+                            const diff = payload.real - payload.esperado;
+                            if (diff > 5) dotColor = '#ef4444'; 
+                            else if (diff < -5) dotColor = '#10b981'; 
+                          }
+                          return <circle key={`dot-${payload.idade}`} cx={cx} cy={cy} r={4} fill={dotColor} stroke="#fff" strokeWidth={1.5} />;
+                        }}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="mb-8 mt-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-0">Mortalidade (Surtos e Picos)</h4>
+                </div>
+                <div className="h-64 w-full bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={mortalityData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      {phaseMilestones.map((pm, i) => (
+                        <ReferenceLine key={i} x={pm.idade} stroke="#cbd5e1" strokeDasharray="3 3">
+                           <Label value={pm.label} position="insideTopRight" offset={10} fill="#94a3b8" fontSize={10} />
+                        </ReferenceLine>
+                      ))}
+                      <XAxis dataKey="idade" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} minTickGap={20} />
+                      <YAxis domain={[0, (dataMax: number) => Math.max(Math.ceil(dataMax * 1.2), Math.ceil(finalMetaMortalidade * 1.5), 5)]} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} tickFormatter={(tick) => `${tick}%`} />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        itemStyle={{ fontSize: '12px', fontWeight: 600 }}
+                        labelStyle={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}
+                        formatter={(value: any, name: any) => [`${value}%`, String(name)]}
+                        labelFormatter={(label) => `Idade: ${label} dias`}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '12px' }} />
+                      <Bar dataKey="mortos" name="Mortos" stackId="a" radius={[4, 4, 0, 0]} barSize={28}>
+                        {mortalityData.map((entry, index) => {
+                          if (entry.mortos === null) return <Cell key={`m-${index}`} fill="#94a3b8" />;
+                          const diff = entry.mortos - entry.meta;
+                          let color = '#3b82f6'; // Azul
+                          if (diff > 0.05) color = '#ef4444'; // Vermelho
+                          else if (diff < -0.05) color = '#10b981'; // Verde
+                          return <Cell key={`m-${index}`} fill={color} />;
+                        })}
+                      </Bar>
+                      <Line type="monotone" dataKey="meta" name={`Meta (${finalMetaMortalidade}%)`} stroke="#94a3b8" strokeWidth={2} dot={false} strokeDasharray="5 5" />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <h4 className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wider">Histórico de Visitas</h4>
+
               <div className="space-y-3">
                 <AnimatePresence>
                 {visits.filter(v => v.integradoId === selectedIntegradoDetails)
@@ -278,79 +502,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                 )}
               </div>
             
-              <div className="mt-8 mb-4 border-t border-slate-100 pt-6">
-                
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-0">Curva de Consumo do Lote</h4>
-                  {curveAccuracy !== null && (
-                    <button onClick={() => setShowAdherenceInfo(true)} className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer focus:outline-none" title="Clique para entender o cálculo">
-                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Aderência:</span>
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold border ${accuracyColorClass}`}>
-                        {curveAccuracy}%
-                      </span>
-                    </button>
-                  )}
-                </div>
-
-                <div className="h-64 w-full bg-white border border-slate-200 rounded-lg p-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      
-                      <defs>
-                        <linearGradient id="colorReal" x1="0%" y1="0%" x2="100%" y2="0%">
-                          {realVisits.map((v, index) => {
-                            let color = '#3b82f6';
-                            if (v.esperado !== null && v.esperado !== undefined && v.real !== null && v.real !== undefined) {
-                              const diff = v.real - v.esperado;
-                              if (diff > 5) color = '#ef4444';
-                              else if (diff < -5) color = '#10b981';
-                            }
-                            const offset = maxReal === minReal ? 0 : ((v.idade - minReal) / (maxReal - minReal)) * 100;
-                            return <stop key={index} offset={`${offset}%`} stopColor={color} />;
-                          })}
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                      <XAxis dataKey="idade" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} minTickGap={20} />
-                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
-                      <Tooltip 
-                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        itemStyle={{ fontSize: '12px', fontWeight: 600 }}
-                        labelStyle={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}
-                        formatter={(value) => [`${value} kg`, '']}
-                        labelFormatter={(label) => `Idade: ${label} dias`}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '12px' }} />
-                      <Line type="monotone" dataKey="esperado" name="Consumo Esperado" stroke="#94a3b8" strokeWidth={2} dot={false} strokeDasharray="5 5" />
-                      
-                      <Line 
-                        type="monotone" 
-                        dataKey="real" 
-                        name="Consumo Real" 
-                        stroke="url(#colorReal)" 
-                        strokeWidth={2} 
-                        connectNulls={true}
-                        activeDot={{ r: 6, strokeWidth: 0 }}
-                        dot={(props: any) => {
-                          const { cx, cy, payload, value } = props;
-                          if (value === null || value === undefined) return null;
-                          
-                          let dotColor = '#3b82f6'; // default blue
-                          if (payload.esperado !== null && payload.esperado !== undefined) {
-                            const diff = payload.real - payload.esperado;
-                            if (diff > 5) dotColor = '#ef4444'; // red
-                            else if (diff < -5) dotColor = '#10b981'; // emerald
-                          }
-                          
-                          return (
-                            <circle cx={cx} cy={cy} r={5} fill={dotColor} stroke="#fff" strokeWidth={2} key={`dot-${payload.idade}`} />
-                          );
-                        }} 
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+              
               </>)}
 
               {activeTab === 'tratamentos' && (
@@ -418,6 +570,179 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                   )}
                 </div>
               )}
+              {activeTab === 'diagnostico' && (() => {
+                const latestEvalVisit = loteVisits.slice().reverse().find(v => v.avaliacao_tecnica);
+                if (!latestEvalVisit || !latestEvalVisit.avaliacao_tecnica) {
+                  return (
+                    <div className="text-sm text-slate-500 text-center py-8 bg-slate-50 rounded-lg border border-slate-100">
+                      Nenhuma avaliação sanitária ou de manejo registrada para este lote.
+                    </div>
+                  );
+                }
+                
+                const ev = latestEvalVisit.avaliacao_tecnica;
+                const parseScore = (val?: number) => {
+                  if (!val) return 0;
+                  if (val === 1) return 3; // Bom
+                  if (val === 2) return 2; // Regular
+                  if (val === 3) return 1; // Ruim
+                  return 0;
+                };
+
+                const radarData = [
+                  { subject: 'Limpeza', score: parseScore(ev.granja?.limpeza_baias), fullMark: 3 },
+                  { subject: 'Desperdício', score: parseScore(ev.granja?.desperdicio_racao), fullMark: 3 },
+                  { subject: 'Ventilação', score: parseScore(ev.granja?.ventilacao_cortinas), fullMark: 3 },
+                  { subject: 'Tosse', score: parseScore(ev.suinos?.tosse), fullMark: 3 },
+                  { subject: 'Diarreia', score: parseScore(ev.suinos?.diarreia), fullMark: 3 },
+                  { subject: 'Uniformidade', score: parseScore(ev.suinos?.uniformidade), fullMark: 3 },
+                  { subject: 'Canibalismo', score: parseScore(ev.suinos?.canibalismo), fullMark: 3 },
+                ];
+
+                const validScores = radarData.filter(d => d.score > 0);
+                const totalScore = validScores.reduce((sum, d) => sum + d.score, 0);
+                const maxPossibleScore = validScores.length * 3;
+                const healthIndex = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
+
+                let healthColor = 'text-slate-800';
+                let healthBg = 'bg-slate-100';
+                let healthBorder = 'border-slate-200';
+                let healthStatus = 'Não Avaliado';
+                let radarColor = '#94a3b8'; // Slate
+                let radarFillOpacity = 0.4;
+
+                if (healthIndex >= 85) {
+                  healthColor = 'text-emerald-700';
+                  healthBg = 'bg-emerald-100';
+                  healthBorder = 'border-emerald-200';
+                  healthStatus = 'Excelente (Poucos ou nenhum risco)';
+                  radarColor = '#10b981'; // Emerald
+                } else if (healthIndex >= 65) {
+                  healthColor = 'text-amber-700';
+                  healthBg = 'bg-amber-100';
+                  healthBorder = 'border-amber-200';
+                  healthStatus = 'Atenção (Requer monitoramento)';
+                  radarColor = '#f59e0b'; // Amber
+                } else if (healthIndex > 0) {
+                  healthColor = 'text-red-700';
+                  healthBg = 'bg-red-100';
+                  healthBorder = 'border-red-200';
+                  healthStatus = 'Crítico (Ação imediata necessária)';
+                  radarColor = '#ef4444'; // Red
+                  radarFillOpacity = 0.6;
+                }
+
+                return (
+                  <div className="space-y-6">
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Índice Sanitário Global</h4>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${healthBg} ${healthColor} border ${healthBorder}`}>
+                            {Math.round(healthIndex)}%
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500">Última avaliação: {new Date(latestEvalVisit.date + 'T12:00:00').toLocaleDateString('pt-BR')} (Idade: {latestEvalVisit.idade} dias)</p>
+                      </div>
+                      <div className="text-sm font-medium text-slate-600 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm">
+                        Status: <strong className={healthColor}>{healthStatus}</strong>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      <div className="lg:col-span-2 h-[350px] w-full bg-white rounded-xl border border-slate-200 shadow-sm p-4 relative">
+                        <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-10 pointer-events-none">
+                          <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider bg-white/80 backdrop-blur-sm px-2 py-1 rounded">Radar de Saúde e Manejo</h4>
+                          <div className="text-[10px] flex flex-col gap-1.5 bg-white/90 backdrop-blur-sm p-2 rounded-lg border border-slate-100 shadow-sm">
+                             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Bom (3 pontos)</span>
+                             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Regular (2 pontos)</span>
+                             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500"></span> Ruim (1 ponto)</span>
+                          </div>
+                        </div>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                            <PolarGrid stroke="#e2e8f0" />
+                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 11, fontWeight: 600 }} />
+                            <PolarRadiusAxis angle={30} domain={[0, 3]} tick={{ fill: '#94a3b8', fontSize: 10 }} tickCount={4} />
+                            <Radar name="Pontuação" dataKey="score" stroke={radarColor} strokeWidth={2} fill={radarColor} fillOpacity={radarFillOpacity} />
+                            <Tooltip 
+                              formatter={(value: any) => {
+                                if (value === 3) return ['Bom (Baixo Risco)', 'Avaliação'];
+                                if (value === 2) return ['Regular (Risco Moderado)', 'Avaliação'];
+                                if (value === 1) return ['Ruim (Alto Risco)', 'Avaliação'];
+                                return ['Não avaliado', 'Avaliação'];
+                              }}
+                              contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                            />
+                          </RadarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      
+                      <div className="flex flex-col gap-4">
+                        <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm h-fit">
+                          <button 
+                            onClick={() => setShowDiagInfo(!showDiagInfo)}
+                            className="w-full flex items-center justify-between p-4 text-left transition-colors hover:bg-slate-100 rounded-xl"
+                          >
+                            <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Como Interpretar o Gráfico</h4>
+                            {showDiagInfo ? <ChevronUp size={18} className="text-slate-500" /> : <ChevronDown size={18} className="text-slate-500" />}
+                          </button>
+                          
+                          <AnimatePresence>
+                            {showDiagInfo && (
+                              <motion.div 
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="p-4 pt-0 space-y-3 text-xs text-slate-600">
+                                  <p>O radar mapeia 7 indicadores chave de saúde e ambiência. <strong>Quanto mais preenchido o gráfico (pontas mais longas), mais saudável está o lote.</strong></p>
+                                  
+                                  <div className="space-y-2 pt-3 border-t border-slate-200">
+                                    <p className="font-semibold text-slate-700">Critério de Cores (Índice):</p>
+                                    <div className="flex items-start gap-2">
+                                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-1"></span>
+                                      <p><strong className="text-emerald-700">Verde (&ge; 85%)</strong>: O gráfico se expande até as bordas. Indica conformidade com as boas práticas.</p>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 mt-1"></span>
+                                      <p><strong className="text-amber-700">Amarelo (65% - 84%)</strong>: O radar tem "recuos". Há pontos de atenção (ex: tosse leve, ventilação inadequada) que podem impactar o ganho de peso.</p>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 mt-1"></span>
+                                      <p><strong className="text-red-700">Vermelho (&lt; 65%)</strong>: O gráfico fica contraído no centro. Indica múltiplos fatores graves ocorrendo simultaneamente, exigindo ação curativa ou ajuste severo de manejo.</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-lg border border-slate-100 p-4">
+                      <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-3">Recomendações Recentes</h4>
+                      <div className="space-y-3">
+                        {loteVisits.slice(-3).reverse().map(v => (
+                          v.recomendacao ? (
+                            <div key={v.id} className="text-sm border-l-2 border-blue-400 pl-3 py-1">
+                              <span className="text-xs font-semibold text-slate-500 block mb-1">
+                                {new Date(v.date + 'T12:00:00').toLocaleDateString('pt-BR')} - {v.idade} dias
+                              </span>
+                              <p className="text-slate-700">{v.recomendacao}</p>
+                            </div>
+                          ) : null
+                        ))}
+                        {loteVisits.filter(v => v.recomendacao).length === 0 && (
+                          <div className="text-sm text-slate-500 italic">Nenhuma recomendação registrada nas últimas visitas.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
           </div>
         
       </div>
@@ -468,8 +793,20 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                 </div>
               </div>
 
-              <div className="text-xs bg-blue-50 text-blue-800 p-3 rounded border border-blue-100">
-                <strong>Nota sobre Cores:</strong> A cor do selo reflete o desvio da <em>última visita</em> (Vermelho {'>'} +5kg, Verde {'<'} -5kg, Azul dentro do limite).
+              <div className="text-xs bg-slate-50 text-slate-700 p-3 rounded border border-slate-200 space-y-2">
+                <p className="font-semibold text-slate-800 border-b border-slate-200 pb-1 mb-2">Critério de Cores e Gravidade (Média do Lote):</p>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-emerald-500 shrink-0"></span>
+                  <p><strong>Excelente (Verde):</strong> Aderência <strong>&ge; 95%</strong>. O lote está consumindo de forma ideal e previsível.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-amber-500 shrink-0"></span>
+                  <p><strong>Atenção (Amarelo):</strong> Aderência <strong>entre 90% e 94%</strong>. Há desvios moderados (desperdício ou baixo consumo).</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-red-500 shrink-0"></span>
+                  <p><strong>Crítico (Vermelho):</strong> Aderência <strong>&lt; 90%</strong>. Alerta severo de saúde (baixo consumo) ou desperdício extremo (alto consumo).</p>
+                </div>
               </div>
             </div>
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">

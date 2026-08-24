@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { Integrado, Visit } from '../types';
 import { getExpectedConsumption } from '../data';
-import { Users, ClipboardList, Search, Filter, ArrowUpDown, Calendar, AlertCircle, CheckCircle2, Clock, X, Trash2 } from 'lucide-react';
+import { Users, FileDown, ClipboardList, Search, Filter, ArrowUpDown, Calendar, AlertCircle, CheckCircle2, Clock, X, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { IntegradoDetailsModal } from './IntegradoDetailsModal';
+import { LoteReportModal } from './LoteReportModal';
 import { AnimatePresence, motion } from 'motion/react';
 import { getSavedUserProfile } from '../lib/auth';
 
@@ -24,6 +25,7 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
   const [editFechamentoDate, setEditFechamentoDate] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [selectedIntegradoDetails, setSelectedIntegradoDetails] = useState<string | null>(null);
+  const [reportIntegradoId, setReportIntegradoId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'Todos' | 'Em andamento' | 'Fechado'>('Todos');
   const [filterVisitStatus, setFilterVisitStatus] = useState<'Todos' | 'Em dia' | 'Atenção' | 'Atrasado'>('Todos');
@@ -341,6 +343,13 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
                       ) : (
                         
                         <div className="flex items-center justify-end gap-3">
+                                                    <button 
+                            onClick={() => setReportIntegradoId(i.id)}
+                            className="text-emerald-600 hover:text-emerald-700 text-xs font-bold uppercase tracking-wider px-2 py-1 rounded hover:bg-emerald-50 transition-colors flex items-center gap-1"
+                            title="Gerar Relatório Analítico (PDF)"
+                          >
+                            <FileDown size={14} /> Relatório
+                          </button>
                           <button 
                             onClick={() => setSelectedIntegradoDetails(i.id)}
                             className="text-slate-600 hover:text-slate-900 text-xs font-semibold px-2 py-1 rounded hover:bg-slate-100 transition-colors"
@@ -434,6 +443,15 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
         )}
       </AnimatePresence>
     
+      {reportIntegradoId && (
+        <LoteReportModal
+          integradoId={reportIntegradoId}
+          visits={visits}
+          integrados={integrados}
+          onClose={() => setReportIntegradoId(null)}
+        />
+      )}
+      
       {selectedIntegradoDetails && (
         <IntegradoDetailsModal
           integradoId={selectedIntegradoDetails}

@@ -191,7 +191,7 @@ export const storage = {
   syncFromSupabase: async () => {
     try {
       if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
-      if (typeof localStorage !== 'undefined' && safeStorage.getItem('EDITING_LOCK') === 'true') return false;
+      if (typeof window !== 'undefined' && safeStorage.getItem('EDITING_LOCK') === 'true') return false;
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session || session.user.id === 'offline') return false;
@@ -404,6 +404,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
           integradoId: v.lote_id,
           idade: idadeDias,
           recomendacao: v.recomendacoes || '',
+          avaliacao_tecnica: v.avaliacao_tecnica || null,
           mortalidade: (v.mortalidade_periodo && lote?.animais_alojados) ? Number(((v.mortalidade_periodo / lote.animais_alojados) * 100).toFixed(2)) : undefined,
           animaisMortos: v.mortalidade_periodo || 0,
           animaisAlojados: lote?.animais_alojados,
@@ -416,7 +417,6 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
           consumoAcumuladoReal: (() => {
              return (vivos > 0 && volumeTotal > 0) ? Number((volumeTotal / vivos).toFixed(2)) : 0;
           })(),
-          sobraSiloKg: Number(v.sobra_silo_kg) || 0,
           descartesPeriodo: Number(v.descartes_periodo) || 0,
           curva_consumo_id: v.curva_consumo_id || null,
           pesoAmostradoKg: (() => {
@@ -673,6 +673,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
           descartes_periodo: Math.round(v.descartesPeriodo || 0),
           pontuacao_sanitaria: v.pontuacaoSanitaria?.toString() || null,
           recomendacoes: v.recomendacao || null,
+          avaliacao_tecnica: v.avaliacao_tecnica || null,
           tecnico_nome: v.colaborador || null,
           curva_consumo_id: v.curva_consumo_id || null
        };

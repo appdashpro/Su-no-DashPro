@@ -32,6 +32,7 @@ export interface EmpresaConfig {
   programa_alimentar: any[];
   medicamentos_permitidos: string[];
   causas_mortalidade: string[];
+  tecnicos?: string[];
   created_at?: string;
   updated_at?: string;
 }
@@ -126,7 +127,7 @@ export interface IntegradoDB {
   id: string;
   empresa_id: string;
   nome: string;
-  comedouro_tipo?: 'Linear' | 'Automático' | 'Misto' | string | null;
+  comedouro_tipo?: 'Linear' | 'Automático' | 'Linear com água' | 'Automático com água' | 'Misto' | string | null;
   ativo: boolean;
   created_at: string;
   updated_at: string;
@@ -220,9 +221,9 @@ export interface VisitaDB {
   data_visita: string; // YYYY-MM-DD
   mortalidade_periodo: number;
   descartes_periodo: number;
-  sobra_silo_kg?: number | null;
   pontuacao_sanitaria?: string | null;
   recomendacoes?: string | null;
+  avaliacao_tecnica?: AvaliacaoTecnica | null;
   curva_consumo_id?: string | null;
   created_at: string;
   updated_at: string;
@@ -249,7 +250,6 @@ export interface RelatorioUnificadoRow {
   "Idade Dias": number;
   "Mortalidade Visita": number;
   "Descartes Visita": number;
-  "Sobra Silo (kg)"?: number;
   "Pontuação Sanitária"?: string;
   Recomendações?: string;
   "Cargas na Visita (kg)": number;
@@ -292,13 +292,14 @@ export interface Visit {
   integradoId: string;
   idade: number; // in days
   recomendacao: string;
+  avaliacao_tecnica?: AvaliacaoTecnica | null;
   tratamentos?: Tratamento[];
   consumoAcumuladoReal?: number;
   mortalidade?: number; // Historically used as percentage or absolute
   animaisAlojados?: number;
   animaisMortos?: number;
   volumeTotalCargas?: number;
-  comedouro: 'Linear' | 'Automático' | 'Misto';
+  comedouro: 'Linear' | 'Automático' | 'Linear com água' | 'Automático com água' | 'Misto' | string;
   tipoLote?: 'Misto' | 'Fêmea' | 'Macho';
   colaborador: string;
   consumoRacaoMeta?: string | Record<string, any>;
@@ -324,7 +325,6 @@ export interface Visit {
   metaTerminacao2?: number;
   consumoTerminacao2?: number;
   metaAcumulada?: number;
-  sobraSiloKg?: number;
   descartesPeriodo?: number;
   pesoAmostradoKg?: number;
 }
@@ -353,3 +353,20 @@ export function isVisitForIntegrado(visit: Visit, integrado: Integrado): boolean
   return false;
 }
 
+
+export interface AvaliacaoTecnica {
+  granja: {
+    limpeza_baias: number;
+    desperdicio_racao: number;
+    ventilacao_cortinas: number;
+    ficha_lote: number;
+  };
+  suinos: {
+    tosse: number;
+    diarreia: number;
+    uniformidade: number;
+    canibalismo: number;
+    prolapso: number;
+    parecer_medicacao: number;
+  };
+}

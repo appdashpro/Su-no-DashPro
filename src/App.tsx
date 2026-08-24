@@ -23,6 +23,7 @@ import * as XLSX from 'xlsx';
 import { storage } from './lib/storage';
 import { supabase } from './lib/supabase';
 import { saveBackupToIndexedDB } from './lib/backup';
+import { seedTestLots } from './lib/seeder';
 import { 
   getSavedUserProfile, 
   saveUserProfile, 
@@ -258,6 +259,7 @@ export default function App() {
  // Fast, offline-first local data load (never blocks UI on network)
  const loadData = useCallback(async () => {
  storage.migrateIds();
+ seedTestLots();
 
  try {
    // Immediately populate UI from fast local cache
@@ -538,11 +540,11 @@ export default function App() {
      const OFFLINE_EDIT_INTEGRADO_QUEUE = 'suino_dashpro_offline_edit_integrado';
      let q = [];
      try {
-       q = JSON.parse(localStorage.getItem(OFFLINE_EDIT_INTEGRADO_QUEUE) || '[]');
+       q = JSON.parse(safeStorage.getItem(OFFLINE_EDIT_INTEGRADO_QUEUE) || '[]');
      } catch (e) {}
      const newQ = q.filter((i: Integrado) => i.id !== integrado.id);
      newQ.push(integrado);
-     localStorage.setItem(OFFLINE_EDIT_INTEGRADO_QUEUE, JSON.stringify(newQ));
+     safeStorage.setItem(OFFLINE_EDIT_INTEGRADO_QUEUE, JSON.stringify(newQ));
    }
 
  const updatedList = integrados.map(i => i.id === integrado.id ? integrado : i);

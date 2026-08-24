@@ -1,11 +1,13 @@
 import { safeStorage } from "../lib/safeStorage";
 import { getEmpresaConfigsLocal } from "../lib/storage";
+import { DEFAULT_TECNICOS } from '../data';
 import React, { useState } from 'react';
 import { Visit, Integrado, Empresa, isVisitForIntegrado } from '../types';
 import { growthCurve, growthCurveFemea, getExpectedConsumption, getExpectedWeight, defaultMetas, defaultMetasFemea, getActiveCurve } from '../data';
 import { Info } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { TratamentosFormSection } from './TratamentosFormSection';
+import { AvaliacaoTecnicaSection } from './AvaliacaoTecnicaSection';
 
 interface VisitaFormProps {
  integrados: Integrado[];
@@ -62,7 +64,12 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  const [outrosColab, setOutrosColab] = useState(() => {
  if (!initialData || !initialData.colaborador) return '';
  const current = initialData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean);
- const predefined = ['Wagner', 'Helio', 'Alessandro', 'Roger', 'João', 'Luana', 'Adelio'];
+ 
+  const cfgs = getEmpresaConfigsLocal();
+  const tCfg = cfgs.find((c: any) => c.empresa_id === (formData?.empresaId));
+  const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
+  const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
+
  return current.filter(c => !predefined.includes(c)).join(' / ');
  });
 
@@ -107,7 +114,6 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  animaisAlojados: visitData.animaisAlojados !== undefined && visitData.animaisAlojados !== null && String(visitData.animaisAlojados).trim() !== '' ? Number(visitData.animaisAlojados) : undefined,
  animaisMortos: visitData.animaisMortos !== undefined && visitData.animaisMortos !== null && String(visitData.animaisMortos).trim() !== '' ? Number(visitData.animaisMortos) : undefined,
  descartesPeriodo: visitData.descartesPeriodo !== undefined && visitData.descartesPeriodo !== null && String(visitData.descartesPeriodo).trim() !== '' ? Number(visitData.descartesPeriodo) : undefined,
- sobraSiloKg: visitData.sobraSiloKg !== undefined && visitData.sobraSiloKg !== null && String(visitData.sobraSiloKg).trim() !== '' ? Number(visitData.sobraSiloKg) : undefined,
  pesoAmostradoKg: (() => {
    const p = visitData.pesoAmostradoKg;
    if (p !== undefined && p !== null && String(p).trim() !== '' && Number(p) > 0) {
@@ -525,8 +531,8 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  >
  <option value="Linear">Linear</option>
  <option value="Automático">Automático</option>
- <option value="Misto">Misto</option>
- <option value="Macho">Macho</option>
+ <option value="Linear com água">Linear com água</option>
+ <option value="Automático com água">Automático com água</option>
  </select>
  </div>
  
@@ -569,7 +575,12 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
 
  </div>
 
- <TratamentosFormSection 
+        <AvaliacaoTecnicaSection 
+          data={formData.avaliacao_tecnica} 
+          onChange={(data) => setFormData(prev => ({ ...prev, avaliacao_tecnica: data }))} 
+        />
+
+        <TratamentosFormSection 
  pesoAmostradoKg={formData.pesoAmostradoKg !== undefined && String(formData.pesoAmostradoKg) !== '' ? Number(formData.pesoAmostradoKg) : undefined}
  onPesoChange={(peso) => setFormData(prev => ({ ...prev, pesoAmostradoKg: peso !== undefined ? peso : undefined }))}
  tratamentos={formData.tratamentos || []}
@@ -680,7 +691,10 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  <div className="space-y-2">
  <label className="block text-xs font-semibold text-slate-500 mb-2">Técnico/Colaborador</label>
  <div className="flex flex-wrap gap-2">
- {['Wagner', 'Helio', 'Alessandro', 'Roger', 'João', 'Luana', 'Adelio'].map(colab => {
+ {(() => {
+  const isPastreCurrent = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
+  const resolvedTecnicos = (currentConfig?.tecnicos !== undefined && currentConfig?.tecnicos !== null) ? currentConfig.tecnicos : (isPastreCurrent ? DEFAULT_TECNICOS : []);
+  return resolvedTecnicos.map((colab: string) => {
  const current = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean) : [];
  const isSelected = current.includes(colab);
  return (
@@ -688,8 +702,13 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  key={colab}
  type="button"
  onClick={() => {
- const predefined = ['Wagner', 'Helio', 'Alessandro', 'Roger', 'João', 'Luana', 'Adelio'];
- const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter(c => predefined.includes(c)) : [];
+ 
+  const cfgs = getEmpresaConfigsLocal();
+  const tCfg = cfgs.find((c: any) => c.empresa_id === (formData?.empresaId));
+  const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
+  const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
+
+ const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter((c: string) => predefined.includes(c)) : [];
  let newSelected;
  if (!isSelected) {
  newSelected = [...currentSelected, colab];
@@ -708,7 +727,8 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  {colab}
  </button>
  )
- })}
+              })
+            })()}
  </div>
  <input 
  type="text"
@@ -717,8 +737,13 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  onChange={(e) => {
  const val = e.target.value;
  setOutrosColab(val);
- const predefined = ['Wagner', 'Helio', 'Alessandro', 'Roger', 'João', 'Luana', 'Adelio'];
- const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter(c => predefined.includes(c)) : [];
+ 
+  const cfgs = getEmpresaConfigsLocal();
+  const tCfg = cfgs.find((c: any) => c.empresa_id === (formData?.empresaId));
+  const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
+  const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
+
+ const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter((c: string) => predefined.includes(c)) : [];
  const typed = val.split(/\s*[,/;-]\s*/).filter(Boolean);
  setFormData(prev => ({ ...prev, colaborador: [...currentSelected, ...typed].join(' / ') }));
  }}

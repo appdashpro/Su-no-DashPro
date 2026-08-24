@@ -133,7 +133,6 @@ export function preprocessImportData(rawData: string): PreProcessedData {
       if (cleanH.includes('animaisalojados') || cleanH === 'alojados') map.animaisAlojados = i;
       if (cleanH.includes('animaismortos') || cleanH === 'mortos') map.animaisMortos = i;
       if (cleanH.includes('descartes') || cleanH === 'descarte') map.descartesPeriodo = i;
-      if (cleanH.includes('sobra') || cleanH.includes('sobrasilo')) map.sobraSiloKg = i;
       if (cleanH.includes('volcargas') || cleanH.includes('cargaenviada') || cleanH.includes('cargaskg')) map.volumeCargas = i;
       if (cleanH.includes('recomendao') || cleanH.includes('recomendacao')) map.recomendacao = i;
       if (cleanH.includes('consumoacumulado') || cleanH.includes('consumoacumuladoreal') || (cleanH.includes('consumo') && !cleanH.includes('aloj') && !cleanH.includes('cresc') && !cleanH.includes('term'))) map.consumoAcumuladoReal = i;
@@ -365,7 +364,6 @@ export function preprocessImportData(rawData: string): PreProcessedData {
       animaisAlojados: finalAnimaisAlojados,
       animaisMortos: finalAnimaisMortos,
       descartesPeriodo: parseFloatSafe(getCol('descartesPeriodo')) || 0,
-      sobraSiloKg: parseFloatSafe(getCol('sobraSiloKg')) || 0,
       volumeTotalCargas: parseFloatSafe(getCol('volumeCargas')),
 
       metaAlojamento: parseFloatSafe(getCol('metaAlojamento')) ?? metas.metaAlojamento,

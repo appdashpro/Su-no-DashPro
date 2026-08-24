@@ -132,7 +132,32 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
 
 ;
 
-  const selectedCurva = curvas.find(c => c.id === selectedCurvaId);
+
+  const currentCurva = curvas.find(c => c.id === selectedCurvaId);
+  const currentGroupKey = currentCurva ? currentCurva.dataVigencia : '';
+  
+  const uniqueGroups = Array.from(new Set(curvas.map(c => c.dataVigencia))).map(dataVigencia => {
+    const groupCurves = curvas.filter(c => c.dataVigencia === dataVigencia);
+    // Try to find a name that doesn't just describe the sex, or strip it
+    let baseName = groupCurves[0].nome;
+    
+    // Simple heuristic: if name contains Misto, Macho, Femea, strip it
+    const cleanName = baseName
+      .replace(/\s*-\s*(misto|macho|fêmea|femea)/i, '')
+      .replace(/\s+(misto|macho|fêmea|femea)/i, '')
+      .replace(/\s*\(.*?\)/g, '') // remove parens just in case
+      .trim();
+      
+    // If we stripped everything, fallback to the original
+    const finalName = cleanName || baseName;
+    return { key: dataVigencia, nome: finalName, dataVigencia };
+  });
+
+  const availableSexesForGroup = currentGroupKey 
+    ? curvas.filter(c => c.dataVigencia === currentGroupKey)
+    : [];
+
+  const selectedCurva = currentCurva;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -160,28 +185,44 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <label className="block text-sm font-semibold text-slate-700 mb-3">Versão da Curva (Visualização)</label>
-          <div className="flex flex-col gap-3">
-            <select
-              value={selectedCurvaId}
-              onChange={(e) => setSelectedCurvaId(e.target.value)}
-              disabled={curvas.length === 0}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#2D452B] outline-none disabled:opacity-50 transition-colors"
-            >
-              {curvas.length === 0 ? <option value="">Nenhuma curva encontrada</option> : null}
-              {curvas.map(cv => (
-                <option key={cv.id} value={cv.id}>{cv.nome}</option>
-              ))}
-            </select>
-            {selectedCurvaId && curvas.find(c => c.id === selectedCurvaId) && (
-              <div className="flex items-center gap-3 text-xs">
-                <span className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-md font-medium tracking-wide">
-                  <span className="opacity-75">VIGÊNCIA:</span> {new Date(curvas.find(c => c.id === selectedCurvaId)!.dataVigencia + 'T12:00:00').toLocaleDateString('pt-BR')}
-                </span>
-                <span className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-md font-medium tracking-wide">
-                  <span className="opacity-75">LOTE:</span> {curvas.find(c => c.id === selectedCurvaId)!.tipoLote || 'Misto'}
-                </span>
-              </div>
-            )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Data / Versão</label>
+              <select
+                value={currentGroupKey}
+                onChange={(e) => {
+                  const newKey = e.target.value;
+                  const matchingCurvas = curvas.filter(c => c.dataVigencia === newKey);
+                  if (matchingCurvas.length > 0) {
+                    // Try to preserve the currently selected sex if possible
+                    const currentSex = currentCurva?.tipoLote;
+                    const sameSexCurve = matchingCurvas.find(c => c.tipoLote === currentSex);
+                    setSelectedCurvaId(sameSexCurve ? sameSexCurve.id : matchingCurvas[0].id);
+                  }
+                }}
+                disabled={curvas.length === 0}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#2D452B] outline-none disabled:opacity-50 transition-colors text-sm"
+              >
+                {curvas.length === 0 ? <option value="">Nenhuma curva</option> : null}
+                {uniqueGroups.map(g => (
+                  <option key={g.key} value={g.key}>{g.nome} ({new Date(g.dataVigencia + 'T12:00:00').toLocaleDateString('pt-BR')})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Sexo dos Animais</label>
+              <select
+                value={currentCurva?.id || ''}
+                onChange={(e) => setSelectedCurvaId(e.target.value)}
+                disabled={availableSexesForGroup.length === 0}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#2D452B] outline-none disabled:opacity-50 transition-colors text-sm"
+              >
+                {availableSexesForGroup.length === 0 ? <option value="">-</option> : null}
+                {availableSexesForGroup.map(c => (
+                  <option key={c.id} value={c.id}>{c.tipoLote || 'Misto'}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>

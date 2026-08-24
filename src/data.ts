@@ -1260,7 +1260,7 @@ export const DEFAULT_CAUSAS_MORTALIDADE: string[] = [
   'Pneumonia / doença respiratória',
   'Úlcera gástrica / hemorragia gástrica',
   'Diarreia / enterite',
-  'Circovirose / doença associada ao PCV2',
+  'Refugagem',
   'Polisserosite',
   'Septicemia / infecção sistêmica',
   'Pericardite',
@@ -1275,3 +1275,5 @@ export const DEFAULT_CAUSAS_MORTALIDADE: string[] = [
   'Outros',
   'Não diagnosticado'
 ];
+
+export const DEFAULT_TECNICOS: string[] = ['Wagner', 'Helio', 'Alessandro', 'Roger', 'João', 'Luana', 'Adelio'];

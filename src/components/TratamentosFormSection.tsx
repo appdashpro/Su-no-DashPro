@@ -1,3 +1,4 @@
+import { safeStorage } from "../lib/safeStorage";
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Tratamento, GrowthCurvePoint } from '../types';
@@ -33,7 +34,7 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('medicationMemory');
+      const stored = safeStorage.getItem('medicationMemory');
       if (stored) setMemory(JSON.parse(stored));
     } catch (e) {}
   }, []);
@@ -68,7 +69,7 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
     if (changed) {
       newMemory = newMemory.slice(0, 5); // Limitar aos últimos 5
       setMemory(newMemory);
-      localStorage.setItem('medicationMemory', JSON.stringify(newMemory));
+      safeStorage.setItem('medicationMemory', JSON.stringify(newMemory));
     }
   }, [tratamentos, memory]);
 

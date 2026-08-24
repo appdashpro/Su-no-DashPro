@@ -1,3 +1,4 @@
+import { safeStorage } from "../lib/safeStorage";
 import React, { useState, useEffect } from 'react';
 import { Integrado, Empresa } from '../types';
 import { supabase } from '../lib/supabase';
@@ -21,7 +22,7 @@ export function IntegradoForm({ onSave, onCancel }: IntegradoFormProps) {
     async function loadEmpresas() {
       // 1. Load from cache immediately
       try {
-        const cachedStr = localStorage.getItem('suino_dashpro_empresas_cache');
+        const cachedStr = safeStorage.getItem('suino_dashpro_empresas_cache');
         if (cachedStr) {
           const cached = JSON.parse(cachedStr);
           if (cached && cached.length > 0) {
@@ -45,7 +46,7 @@ export function IntegradoForm({ onSave, onCancel }: IntegradoFormProps) {
         if (data && !error) {
           setEmpresas(data);
           try {
-             localStorage.setItem('suino_dashpro_empresas_cache', JSON.stringify(data));
+             safeStorage.setItem('suino_dashpro_empresas_cache', JSON.stringify(data));
           } catch(e) {}
           
           if (!selectedEmpresaId) {
