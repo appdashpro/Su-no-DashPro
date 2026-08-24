@@ -43,5 +43,8 @@
     "workbox-strategies": "^7.4.1",
     "workbox-window": "^7.4.1",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "puppeteer": "^25.8.0"
   }
 }

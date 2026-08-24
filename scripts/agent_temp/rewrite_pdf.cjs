@@ -1,4 +1,10 @@
-import React, { useRef, useState } from 'react';
+const fs = require('fs');
+const path = require('path');
+
+const filePath = path.join(process.cwd(), 'src', 'components', 'LoteReportModal.tsx');
+let content = fs.readFileSync(filePath, 'utf8');
+
+const replacement = `import React, { useRef, useState } from 'react';
 import { Visit, Integrado } from '../types';
 import { getExpectedConsumption, getActiveCurve } from '../data';
 import { getEmpresaConfigsLocal } from '../lib/storage';
@@ -28,7 +34,7 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
   const latestVisit = loteVisits.length > 0 ? loteVisits[loteVisits.length - 1] : null;
 
   const maxIdade = Math.max(105, ...(loteVisits.map(v => v.idade || 0)));
-  const chartData: any[] = [];
+  const chartData = [];
   for (let d = 1; d <= maxIdade; d++) {
      const visit = loteVisits.find(v => v.idade === d);
      const esperado = getExpectedConsumption(d, loteVisits[0]?.tipoLote, loteVisits[0]?.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, undefined, undefined, loteVisits[0]?.date);
@@ -41,7 +47,7 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
 
   const activeCurveInfo = getActiveCurve(lote?.alojamentoDate, lote?.status, loteVisits[0]?.tipoLote, lote?.fechamentoDate, undefined, loteVisits[0]?.curva_consumo_id, loteVisits[0]?.date) || {};
   const metas = activeCurveInfo?.metas;
-  const phaseMilestones: any[] = [];
+  const phaseMilestones = [];
   if (metas) {
     let accum = 0;
     const phaseDefs = [
@@ -53,7 +59,7 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
        { key: 'metaTerminacao2', label: 'Te. 2' }
     ];
     let phaseIdx = 0;
-    accum += (metas as any)[phaseDefs[phaseIdx].key] || 0;
+    accum += metas[phaseDefs[phaseIdx].key] || 0;
     for (let i = 0; i < chartData.length; i++) {
       if (phaseIdx >= phaseDefs.length) break;
       if (chartData[i].esperado !== null && chartData[i].esperado >= accum) {
@@ -63,7 +69,7 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
          });
          phaseIdx++;
          if (phaseIdx < phaseDefs.length) {
-            accum += (metas as any)[phaseDefs[phaseIdx].key] || 0;
+            accum += metas[phaseDefs[phaseIdx].key] || 0;
          }
       }
     }
@@ -112,16 +118,11 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
   const descartes = latestVisit?.descartesPeriodo || 0;
   const vivos = Math.max(0, alojados - mortos - descartes);
   const mortPercent = alojados > 0 ? ((mortos / alojados) * 100).toFixed(2) : '-';
-  const visitWithConsumo = loteVisits.slice().reverse().find(v => v.consumoAcumuladoReal !== undefined && v.consumoAcumuladoReal !== null);
-  const consumoRealCab = visitWithConsumo
-    ? Number(visitWithConsumo.consumoAcumuladoReal)
+  const consumoRealCab = (latestVisit?.consumoAcumuladoReal !== undefined && latestVisit?.consumoAcumuladoReal !== null)
+    ? Number(latestVisit.consumoAcumuladoReal)
     : (totalRacao > 0 && vivos > 0 ? Number((totalRacao / vivos).toFixed(2)) : undefined);
-  
-  const referenceVisit = visitWithConsumo || latestVisit;
-  const targetAge = referenceVisit?.idade || maxIdade;
-  
-  const consumoEsperado = (referenceVisit && targetAge > 0)
-    ? getExpectedConsumption(targetAge, referenceVisit.tipoLote, referenceVisit.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, undefined, undefined, referenceVisit.date)
+  const consumoEsperado = (latestVisit && maxIdade > 0)
+    ? getExpectedConsumption(maxIdade, latestVisit.tipoLote, latestVisit.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, undefined, undefined, latestVisit.date)
     : null;
 
   // Pagination Engine
@@ -130,7 +131,7 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
     .flatMap(v => v.tratamentos!.map(t => ({
       date: v.date,
       idade: v.idade,
-      produtoNome: t.produto,
+      produtoNome: t.produtoNome,
       motivo: t.motivo,
       duracaoDias: t.duracaoDias
     })));
@@ -224,31 +225,12 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
       for (let i = 0; i < pageElements.length; i++) {
         if (i > 0) pdf.addPage();
         const el = pageElements[i] as HTMLElement;
-        
-        // Clone the element and attach to body to bypass any modal/overflow/transform clipping issues
-        const clone = el.cloneNode(true) as HTMLElement;
-        document.body.appendChild(clone);
-        
-        clone.style.position = 'fixed';
-        clone.style.top = '0';
-        clone.style.left = '0';
-        clone.style.zIndex = '9999';
-        clone.style.transform = 'none'; // reset any transforms
-        
-        const canvas = await html2canvas(clone, { 
-          scale: 2, 
-          useCORS: true,
-          scrollY: 0,
-          scrollX: 0
-        });
-        
-        document.body.removeChild(clone);
-        
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true });
         const imgData = canvas.toDataURL('image/png');
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       }
 
-      pdf.save(`Relatorio_${lote?.name.replace(/\s+/g, '_')}.pdf`);
+      pdf.save(\`Relatorio_\${lote?.name.replace(/\\s+/g, '_')}.pdf\`);
     } catch (err) {
       console.error(err);
       alert('Erro ao gerar PDF.');
@@ -286,11 +268,11 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Consumo Médio</p>
           <p className="text-xl font-black text-slate-800">{consumoRealCab?.toFixed(1) || '-'} <span className="text-xs font-normal">kg/cab</span></p>
-          <p className="text-xs text-slate-500 mt-1">Meta: {consumoEsperado?.toFixed(1) || '-'} kg {targetAge ? `(aos ${targetAge}d)` : ''}</p>
+          <p className="text-xs text-slate-500 mt-1">Meta: {consumoEsperado?.toFixed(1) || '-'} kg</p>
         </div>
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Aderência</p>
-          <p className="text-xl font-black text-slate-800">{curveAccuracy !== null ? `${curveAccuracy}%` : '-'}</p>
+          <p className="text-xl font-black text-slate-800">{curveAccuracy !== null ? \`\${curveAccuracy}%\` : '-'}</p>
           <p className="text-xs text-slate-500 mt-1">Real vs Esperado</p>
         </div>
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
@@ -393,7 +375,7 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
                   }
                   
                   if (item.type === 'spacing') {
-                    return <div key={i} style={{ height: `${item.height}px` }} />;
+                    return <div key={i} style={{ height: \`\${item.height}px\` }} />;
                   }
 
                   if (item.type === 'trat-title') {
@@ -429,7 +411,7 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
                         <div className="w-1/4 px-3 py-2">{new Date(item.data.date + 'T12:00:00').toLocaleDateString('pt-BR')} ({item.data.idade}d)</div>
                         <div className="w-1/4 px-3 py-2 font-medium">{item.data.produtoNome}</div>
                         <div className="w-1/3 px-3 py-2">{item.data.motivo}</div>
-                        <div className="w-1/6 px-3 py-2 text-right">{item.data.duracaoDias ? `${item.data.duracaoDias} dias` : '-'}</div>
+                        <div className="w-1/6 px-3 py-2 text-right">{item.data.duracaoDias ? \`\${item.data.duracaoDias} dias\` : '-'}</div>
                       </div>
                     );
                   }
@@ -477,3 +459,7 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
     </div>
   );
 }
+`;
+
+fs.writeFileSync(filePath, replacement);
+console.log('Update complete LoteReportModal smart pages');
