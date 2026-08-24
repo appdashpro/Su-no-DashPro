@@ -259,9 +259,11 @@ export const storage = {
       }
 const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEUE) || '[]');
       if (delIntQueue.length > 0) {
+        let remainingDelIntQueue = [];
         for (const id of delIntQueue) {
           try {
-            const { data: vList } = await supabase.from('visitas').select('id').eq('lote_id', id);
+            const { data: vList, error: selErr } = await supabase.from('visitas').select('id').eq('lote_id', id);
+            if (selErr) throw selErr;
             if (vList && vList.length > 0) {
               const vIds = vList.map(v => v.id);
               await supabase.from('cargas_racao').delete().in('visita_id', vIds);
@@ -270,26 +272,45 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
             }
             await supabase.from('cargas_racao').delete().eq('lote_id', id);
             await supabase.from('tratamentos').delete().eq('lote_id', id);
-            await supabase.from('lotes').delete().eq('id', id);
+            const { error: delErr } = await supabase.from('lotes').delete().eq('id', id);
+            if (delErr) throw delErr;
           } catch (delErr) {
             console.error('Erro ao sincronizar exclusão de lote:', delErr);
+            if (delErr && (delErr.message && (delErr.message.includes('fetch') || delErr.message.includes('network') || delErr.message.includes('timeout')) || delErr.code === '0')) {
+                remainingDelIntQueue.push(id);
+            }
           }
         }
-        safeStorage.removeItem(OFFLINE_DELETE_INTEGRADO_QUEUE);
+        if (remainingDelIntQueue.length > 0) {
+          safeStorage.setItem(OFFLINE_DELETE_INTEGRADO_QUEUE, JSON.stringify(remainingDelIntQueue));
+        } else {
+          safeStorage.removeItem(OFFLINE_DELETE_INTEGRADO_QUEUE);
+        }
       }
 
       const delVisitQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_VISIT_QUEUE) || '[]');
       if (delVisitQueue.length > 0) {
+        let remainingDelVisitQueue = [];
         for (const id of delVisitQueue) {
           try {
-            await supabase.from('cargas_racao').delete().eq('visita_id', id);
-            await supabase.from('tratamentos').delete().eq('visita_id', id);
-            await supabase.from('visitas').delete().eq('id', id);
+            const { error: err1 } = await supabase.from('cargas_racao').delete().eq('visita_id', id);
+            if (err1) throw err1;
+            const { error: err2 } = await supabase.from('tratamentos').delete().eq('visita_id', id);
+            if (err2) throw err2;
+            const { error: err3 } = await supabase.from('visitas').delete().eq('id', id);
+            if (err3) throw err3;
           } catch (delErr) {
             console.error('Erro ao sincronizar exclusão de visita:', delErr);
+            if (delErr && (delErr.message && (delErr.message.includes('fetch') || delErr.message.includes('network') || delErr.message.includes('timeout')) || delErr.code === '0')) {
+                remainingDelVisitQueue.push(id);
+            }
           }
         }
-        safeStorage.removeItem(OFFLINE_DELETE_VISIT_QUEUE);
+        if (remainingDelVisitQueue.length > 0) {
+          safeStorage.setItem(OFFLINE_DELETE_VISIT_QUEUE, JSON.stringify(remainingDelVisitQueue));
+        } else {
+          safeStorage.removeItem(OFFLINE_DELETE_VISIT_QUEUE);
+        }
       }
 
       const queueStr = safeStorage.getItem(OFFLINE_QUEUE_KEY);
@@ -306,9 +327,17 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
           try {
               await storage.saveVisits(getVisitsLocal(), queue);
           } catch (err) {
-              // Restore the entire original queue if it failed completely to avoid losing unprocessed items
-              // (The items already processed might be added again, but upserts handle duplicates fine)
-              safeStorage.setItem(OFFLINE_QUEUE_KEY, queueStr);
+              // Restore the original queue, BUT merge with any new items added by the UI during the sync
+              const currentQueueStr = safeStorage.getItem(OFFLINE_QUEUE_KEY);
+              const currentQueue = currentQueueStr ? JSON.parse(currentQueueStr) : [];
+              
+              // Add back items that were in the queue we tried to process
+              for (const v of queue) {
+                  if (!currentQueue.find((q) => q.id === v.id)) {
+                      currentQueue.push(v);
+                  }
+              }
+              safeStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(currentQueue));
               throw err;
           }
           
@@ -593,6 +622,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
     const toProcess = visitsToSyncToSupabase || visits;
     
     for (const v of toProcess) {
+      try {
        const loteId = v.integradoId;
        
        // Ensure Integrado and Lote exist in Supabase before upserting Visita
@@ -801,8 +831,11 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
              continue;
          }
        }
+      } catch (loopErr) {
+         console.error('Exception processing visit in saveVisits:', loopErr);
+         addVisitsToOfflineQueue([v]);
+      }
     }
-
     return visits;
   },
 

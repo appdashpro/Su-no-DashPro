@@ -22,7 +22,7 @@ import { Menu, X, LogOut, Download, Wifi, WifiOff, RefreshCw, Moon, Sun, Users, 
 import * as XLSX from 'xlsx';
 import { storage } from './lib/storage';
 import { supabase } from './lib/supabase';
-import { saveBackupToIndexedDB } from './lib/backup';
+import { saveBackupToIndexedDB, restoreBackupFromIndexedDB } from './lib/backup';
 import { seedTestLots } from './lib/seeder';
 import { 
   getSavedUserProfile, 
@@ -258,6 +258,7 @@ export default function App() {
 
  // Fast, offline-first local data load (never blocks UI on network)
  const loadData = useCallback(async () => {
+ await restoreBackupFromIndexedDB();
  storage.migrateIds();
  seedTestLots();
 
