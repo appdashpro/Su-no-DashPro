@@ -782,9 +782,9 @@ export default function App() {
  )}
  
  {currentTab === 'medicamentos' && <MedicationAnalysis visits={visibleVisits} integrados={visibleIntegrados} />}
- {currentTab === 'curva' && <ReferenceCurve currentUser={currentUserProfile} />}
+ {currentTab === 'curva' && <ReferenceCurve currentUser={currentUserProfile} empresas={visibleEmpresas} />}
  {currentTab === 'importar' && <ImportData onImportComplete={() => { loadData(); setCurrentTab('dashboard'); }} />}
- {currentTab === 'parametros' && <EmpresaConfigGestao currentUser={currentUserProfile} />}
+ {currentTab === 'parametros' && <EmpresaConfigGestao currentUser={currentUserProfile} empresas={visibleEmpresas} />}
  {currentTab === 'usuarios' && <UsuariosGestao integrados={integrados} currentUser={currentUserProfile} onImpersonate={(user) => {
   setMasterUserProfile(currentUserProfile);
   setCurrentUserProfile(user);

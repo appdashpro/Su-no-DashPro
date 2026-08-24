@@ -73,21 +73,16 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
     }
   }, [tratamentos, memory]);
 
-  const [localWeightStr, setLocalWeightStr] = useState<string>(() => {
-    if (pesoAmostradoKg !== undefined && Number(pesoAmostradoKg) > 0) return String(pesoAmostradoKg);
-    const tratWeight = tratamentos.find(t => t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)?.pesoEstimadoKg;
-    if (tratWeight) return String(tratWeight);
-    return '';
-  });
+  const [localWeightStr, setLocalWeightStr] = useState<string | null>(null);
 
   useEffect(() => {
     if (pesoAmostradoKg !== undefined && Number(pesoAmostradoKg) > 0) {
-      if (parseFloat(localWeightStr) !== pesoAmostradoKg) {
+      if (localWeightStr === null || parseFloat(localWeightStr) !== pesoAmostradoKg) {
         setLocalWeightStr(String(pesoAmostradoKg));
       }
     } else {
       const tratWeight = tratamentos.find(t => t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)?.pesoEstimadoKg;
-      if (tratWeight && parseFloat(localWeightStr) !== tratWeight) {
+      if (tratWeight && (localWeightStr === null || parseFloat(localWeightStr) !== tratWeight)) {
         setLocalWeightStr(String(tratWeight));
       }
     }
@@ -112,13 +107,13 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
     const newWeight = val === '' ? undefined : parseFloat(val);
     if (onPesoChange && !isNaN(newWeight as number)) onPesoChange(newWeight);
     else if (onPesoChange && val === '') onPesoChange(undefined);
-    const effectiveNewWeight = !isNaN(newWeight as number) && newWeight !== undefined && newWeight > 0 ? newWeight : (pesoEstimadoCurve > 0 ? pesoEstimadoCurve : 0);
+    const calcWeight = !isNaN(newWeight as number) && newWeight !== undefined && newWeight > 0 ? newWeight : (pesoEstimadoCurve > 0 ? pesoEstimadoCurve : 0);
     
-    // Recalculate all treatments with the new weight
+    // Recalculate all treatments with the calc weight
     if (tratamentos.length > 0) {
       const updated = tratamentos.map(t => {
-        if (!t.doseMgKg) return { ...t, pesoEstimadoKg: effectiveNewWeight > 0 ? effectiveNewWeight : undefined };
-        let mgPorDia = t.doseMgKg * effectiveNewWeight * animaisVivos;
+        if (!t.doseMgKg) return { ...t, pesoEstimadoKg: newWeight };
+        let mgPorDia = t.doseMgKg * calcWeight * animaisVivos;
         let produtoPorDia = mgPorDia;
         if (t.concentracao && t.concentracao > 0) {
           produtoPorDia = mgPorDia / (t.concentracao / 100);
@@ -128,7 +123,7 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
           ...t,
           quantidadePorDia: Number(gramasPorDia.toFixed(2)),
           quantidadeTotal: t.duracaoDias ? Number((gramasPorDia * t.duracaoDias).toFixed(2)) : 0,
-          pesoEstimadoKg: effectiveNewWeight > 0 ? effectiveNewWeight : undefined
+          pesoEstimadoKg: newWeight
         };
       });
       onChange(updated);
@@ -202,7 +197,7 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
     onChange(newTratamentos);
   };
 
-  const displayWeightValue = localWeightStr !== ''
+  const displayWeightValue = localWeightStr !== null
     ? localWeightStr
     : ((pesoAmostradoKg !== undefined && Number(pesoAmostradoKg) > 0)
         ? String(pesoAmostradoKg)

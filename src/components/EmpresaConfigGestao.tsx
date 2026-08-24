@@ -3,13 +3,15 @@ import { supabase } from '../lib/supabase';
 import { Empresa, EmpresaConfig, UserProfile, CurveConfig } from '../types';
 import { Save, AlertCircle, Plus, Trash2, Settings, X, RotateCcw } from 'lucide-react';
 import { DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE, DEFAULT_TECNICOS, growthCurvesMisto, growthCurveFemea, defaultMetas, defaultMetasFemea } from '../data';
+import { getEmpresaConfigsLocal } from '../lib/storage';
 
 interface EmpresaConfigGestaoProps {
   currentUser: UserProfile | null;
+  empresas?: Empresa[];
 }
 
-export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
-  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfigGestaoProps) {
+  const [empresasList, setEmpresasList] = useState<Empresa[]>([]);
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>('');
   const [config, setConfig] = useState<EmpresaConfig | null>(null);
   const [loading, setLoading] = useState(false);
@@ -29,8 +31,13 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
   const [newCausa, setNewCausa] = useState('');
       
   useEffect(() => {
-    fetchEmpresas();
-  }, []);
+    if (empresas && empresas.length > 0) {
+      setEmpresasList(empresas);
+      if (!selectedEmpresaId) setSelectedEmpresaId(empresas[0].id);
+    } else {
+      fetchEmpresas();
+    }
+  }, [empresas]);
 
   useEffect(() => {
     if (selectedEmpresaId) {
@@ -50,7 +57,7 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
         .order('nome');
 
       if (err) throw err;
-      setEmpresas(data || []);
+      setEmpresasList(data || []);
       if (data && data.length > 0) {
         setSelectedEmpresaId(data[0].id);
       }
@@ -77,19 +84,32 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
         throw err;
       }
 
-      if (data) {
-        setConfig(data);
-        setTipoCalculo(data.tipo_calculo_curva || 'DIA_UM');
-        setMetaMortalidade(data.meta_mortalidade || 0);
-        setMedicamentos((data.medicamentos_permitidos && data.medicamentos_permitidos.length > 0) ? data.medicamentos_permitidos : DEFAULT_MEDICAMENTOS_PERMITIDOS);
-        setCausas((data.causas_mortalidade && data.causas_mortalidade.length > 0) ? data.causas_mortalidade : DEFAULT_CAUSAS_MORTALIDADE);
+      const localConfigs = getEmpresaConfigsLocal();
+      const localCfg = localConfigs.find((c: any) => c.empresa_id === empresaId);
+      let activeData = data || localCfg;
+      
+      if (data && localCfg) {
+         if (empresaId === '00000000-0000-0000-0000-000000000003') {
+             activeData = { 
+                ...data, 
+                curva_desempenho: localCfg.curva_desempenho,
+                programa_alimentar: localCfg.programa_alimentar
+             };
+         }
+      }
+
+      if (activeData) {
+        setConfig(activeData);
+        setTipoCalculo(activeData.tipo_calculo_curva || 'DIA_UM');
+        setMetaMortalidade(activeData.meta_mortalidade || 0);
+        setMedicamentos((activeData.medicamentos_permitidos && activeData.medicamentos_permitidos.length > 0) ? activeData.medicamentos_permitidos : DEFAULT_MEDICAMENTOS_PERMITIDOS);
+        setCausas((activeData.causas_mortalidade && activeData.causas_mortalidade.length > 0) ? activeData.causas_mortalidade : DEFAULT_CAUSAS_MORTALIDADE);
         
-        const emp = empresas.find(e => e.id === selectedEmpresaId);
+        const emp = empresasList.length > 0 ? empresasList.find(e => e.id === selectedEmpresaId) : empresas.find(e => e.id === selectedEmpresaId);
         const isPastre = emp?.nome ? emp.nome.toLowerCase().includes('pastre') : false;
-        setTecnicos((data.tecnicos !== undefined && data.tecnicos !== null) ? data.tecnicos : (isPastre ? DEFAULT_TECNICOS : []));
+        setTecnicos((activeData.tecnicos !== undefined && activeData.tecnicos !== null) ? activeData.tecnicos : (isPastre ? DEFAULT_TECNICOS : []));
   
         
-
       } else {
         setConfig(null);
         setTipoCalculo('DIA_UM');
@@ -97,7 +117,7 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
         setMedicamentos(DEFAULT_MEDICAMENTOS_PERMITIDOS);
         setCausas(DEFAULT_CAUSAS_MORTALIDADE);
         
-        const emp = empresas.find(e => e.id === selectedEmpresaId);
+        const emp = empresasList.length > 0 ? empresasList.find(e => e.id === selectedEmpresaId) : empresas.find(e => e.id === selectedEmpresaId);
         const isPastre = emp?.nome ? emp.nome.toLowerCase().includes('pastre') : false;
         setTecnicos(isPastre ? DEFAULT_TECNICOS : []);
   
@@ -199,10 +219,10 @@ export function EmpresaConfigGestao({ currentUser }: EmpresaConfigGestaoProps) {
           <select
             value={selectedEmpresaId}
             onChange={(e) => setSelectedEmpresaId(e.target.value)}
-            disabled={!isMaster && empresas.length <= 1}
+            disabled={!isMaster && empresasList.length <= 1}
             className="w-full sm:w-96 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
           >
-            {empresas.map(emp => (
+            {empresasList.map(emp => (
               <option key={emp.id} value={emp.id}>{emp.nome}</option>
             ))}
           </select>

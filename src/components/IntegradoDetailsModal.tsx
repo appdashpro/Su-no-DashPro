@@ -17,6 +17,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
   const [showAdherenceInfo, setShowAdherenceInfo] = useState(false);
   const [showDiagInfo, setShowDiagInfo] = useState(false);
   const [activeTab, setActiveTab] = useState<'geral' | 'tratamentos' | 'diagnostico'>('geral');
+  const [selectedDiagVisitId, setSelectedDiagVisitId] = useState<string>('average');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -37,7 +38,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
   const lote = integrados.find(i => i.id === integradoId);
   const configs = getEmpresaConfigsLocal();
   const currentConfig = configs.find((c: any) => c.empresa_id === lote?.empresaId);
-  const finalMetaMortalidade = currentConfig?.meta_mortalidade || 0.5;
+  const finalMetaMortalidade = (currentConfig?.meta_mortalidade !== undefined && currentConfig?.meta_mortalidade !== null) ? currentConfig.meta_mortalidade : 0.5;
 
   const loteVisits = visits.filter(v => v.integradoId === integradoId).sort((a, b) => (a.idade || 0) - (b.idade || 0));
   
@@ -88,7 +89,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
   const mortalityData = [];
   for (let d = 1; d <= maxIdade; d++) {
     const visit = loteVisits.find(v => v.idade === d);
-    const proportionalMeta = Number(((d / maxIdade) * finalMetaMortalidade).toFixed(2));
+    const proportionalMeta = Number(finalMetaMortalidade);
     if (visit) {
       const alojados = visit.animaisAlojados || loteVisits[0]?.animaisAlojados || 1;
       const mortos = visit.animaisMortos || 0;
@@ -571,16 +572,15 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                 </div>
               )}
               {activeTab === 'diagnostico' && (() => {
-                const latestEvalVisit = loteVisits.slice().reverse().find(v => v.avaliacao_tecnica);
-                if (!latestEvalVisit || !latestEvalVisit.avaliacao_tecnica) {
+                const evalVisits = loteVisits.filter(v => v.avaliacao_tecnica);
+                if (evalVisits.length === 0) {
                   return (
                     <div className="text-sm text-slate-500 text-center py-8 bg-slate-50 rounded-lg border border-slate-100">
                       Nenhuma avaliação sanitária ou de manejo registrada para este lote.
                     </div>
                   );
                 }
-                
-                const ev = latestEvalVisit.avaliacao_tecnica;
+
                 const parseScore = (val?: number) => {
                   if (!val) return 0;
                   if (val === 1) return 3; // Bom
@@ -589,15 +589,78 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                   return 0;
                 };
 
-                const radarData = [
-                  { subject: 'Limpeza', score: parseScore(ev.granja?.limpeza_baias), fullMark: 3 },
-                  { subject: 'Desperdício', score: parseScore(ev.granja?.desperdicio_racao), fullMark: 3 },
-                  { subject: 'Ventilação', score: parseScore(ev.granja?.ventilacao_cortinas), fullMark: 3 },
-                  { subject: 'Tosse', score: parseScore(ev.suinos?.tosse), fullMark: 3 },
-                  { subject: 'Diarreia', score: parseScore(ev.suinos?.diarreia), fullMark: 3 },
-                  { subject: 'Uniformidade', score: parseScore(ev.suinos?.uniformidade), fullMark: 3 },
-                  { subject: 'Canibalismo', score: parseScore(ev.suinos?.canibalismo), fullMark: 3 },
-                ];
+                let radarData: any[] = [];
+                let displayTitle = '';
+                let displaySubtitle = '';
+
+                if (selectedDiagVisitId === 'average') {
+                  const aggregated: Record<string, { total: number, count: number }> = {
+                    'Limpeza': { total: 0, count: 0 },
+                    'Desperdício': { total: 0, count: 0 },
+                    'Ventilação': { total: 0, count: 0 },
+                    'Tosse': { total: 0, count: 0 },
+                    'Diarreia': { total: 0, count: 0 },
+                    'Uniformidade': { total: 0, count: 0 },
+                    'Canibalismo': { total: 0, count: 0 },
+                  };
+
+                  evalVisits.forEach(v => {
+                    const ev = v.avaliacao_tecnica!;
+                    const scores = {
+                      'Limpeza': parseScore(ev.granja?.limpeza_baias),
+                      'Desperdício': parseScore(ev.granja?.desperdicio_racao),
+                      'Ventilação': parseScore(ev.granja?.ventilacao_cortinas),
+                      'Tosse': parseScore(ev.suinos?.tosse),
+                      'Diarreia': parseScore(ev.suinos?.diarreia),
+                      'Uniformidade': parseScore(ev.suinos?.uniformidade),
+                      'Canibalismo': parseScore(ev.suinos?.canibalismo),
+                    };
+
+                    Object.entries(scores).forEach(([key, score]) => {
+                      if (score > 0) {
+                        aggregated[key].total += score;
+                        aggregated[key].count += 1;
+                      }
+                    });
+                  });
+
+                  radarData = Object.entries(aggregated).map(([subject, data]) => ({
+                    subject,
+                    score: data.count > 0 ? (data.total / data.count) : 0,
+                    fullMark: 3
+                  }));
+
+                  displayTitle = 'Média do Lote';
+                  displaySubtitle = `Baseado em ${evalVisits.length} avaliações`;
+                } else {
+                  const selectedVisit = evalVisits.find(v => v.id === selectedDiagVisitId);
+                  if (selectedVisit && selectedVisit.avaliacao_tecnica) {
+                    const ev = selectedVisit.avaliacao_tecnica;
+                    radarData = [
+                      { subject: 'Limpeza', score: parseScore(ev.granja?.limpeza_baias), fullMark: 3 },
+                      { subject: 'Desperdício', score: parseScore(ev.granja?.desperdicio_racao), fullMark: 3 },
+                      { subject: 'Ventilação', score: parseScore(ev.granja?.ventilacao_cortinas), fullMark: 3 },
+                      { subject: 'Tosse', score: parseScore(ev.suinos?.tosse), fullMark: 3 },
+                      { subject: 'Diarreia', score: parseScore(ev.suinos?.diarreia), fullMark: 3 },
+                      { subject: 'Uniformidade', score: parseScore(ev.suinos?.uniformidade), fullMark: 3 },
+                      { subject: 'Canibalismo', score: parseScore(ev.suinos?.canibalismo), fullMark: 3 },
+                    ];
+                    displayTitle = `Visita Específica`;
+                    displaySubtitle = `${new Date(selectedVisit.date + 'T12:00:00').toLocaleDateString('pt-BR')} (Idade: ${selectedVisit.idade} dias)`;
+                  } else {
+                    radarData = [
+                      { subject: 'Limpeza', score: 0, fullMark: 3 },
+                      { subject: 'Desperdício', score: 0, fullMark: 3 },
+                      { subject: 'Ventilação', score: 0, fullMark: 3 },
+                      { subject: 'Tosse', score: 0, fullMark: 3 },
+                      { subject: 'Diarreia', score: 0, fullMark: 3 },
+                      { subject: 'Uniformidade', score: 0, fullMark: 3 },
+                      { subject: 'Canibalismo', score: 0, fullMark: 3 },
+                    ];
+                    displayTitle = 'Avaliação não encontrada';
+                    displaySubtitle = '-';
+                  }
+                }
 
                 const validScores = radarData.filter(d => d.score > 0);
                 const totalScore = validScores.reduce((sum, d) => sum + d.score, 0);
@@ -635,17 +698,32 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                 return (
                   <div className="space-y-6">
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-                      <div>
+                      <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Índice Sanitário Global</h4>
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${healthBg} ${healthColor} border ${healthBorder}`}>
                             {Math.round(healthIndex)}%
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500">Última avaliação: {new Date(latestEvalVisit.date + 'T12:00:00').toLocaleDateString('pt-BR')} (Idade: {latestEvalVisit.idade} dias)</p>
+                        <p className="text-xs text-slate-500">{displayTitle} {displaySubtitle ? `- ${displaySubtitle}` : ''}</p>
                       </div>
-                      <div className="text-sm font-medium text-slate-600 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm">
-                        Status: <strong className={healthColor}>{healthStatus}</strong>
+                      
+                      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center w-full md:w-auto">
+                        <div className="text-sm font-medium text-slate-600 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm whitespace-nowrap">
+                          Status: <strong className={healthColor}>{healthStatus}</strong>
+                        </div>
+                        <select
+                          className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px] w-full sm:w-auto font-medium"
+                          value={selectedDiagVisitId}
+                          onChange={(e) => setSelectedDiagVisitId(e.target.value)}
+                        >
+                          <option value="average">Média do Lote</option>
+                          {evalVisits.slice().reverse().map(v => (
+                            <option key={v.id} value={v.id}>
+                              Visita: {new Date(v.date + 'T12:00:00').toLocaleDateString('pt-BR')} ({v.idade}d)
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 

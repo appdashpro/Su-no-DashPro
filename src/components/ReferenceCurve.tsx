@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { Empresa, EmpresaConfig, CurveConfig, UserProfile } from '../types';
-import { AlertCircle, Check } from 'lucide-react';
+import { AlertCircle, Check, Save, Edit2, X } from 'lucide-react';
+import { getEmpresaConfigsLocal } from '../lib/storage';
 
 interface ReferenceCurveProps {
   currentUser?: UserProfile | null;
+  empresas?: Empresa[];
 }
 
-export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
-  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurveProps) {
+  const [empresasList, setEmpresasList] = useState<Empresa[]>([]);
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>('');
   
   const [config, setConfig] = useState<EmpresaConfig | null>(null);
@@ -18,15 +20,18 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
   const [editableCurve, setEditableCurve] = useState<any[]>([]);
   
   const [editableMetas, setEditableMetas] = useState<any>(null);
 
-
   useEffect(() => {
-    fetchEmpresas();
-  }, []);
+    if (empresas && empresas.length > 0) {
+      setEmpresasList(empresas);
+      if (!selectedEmpresaId) setSelectedEmpresaId(empresas[0].id);
+    } else {
+      fetchEmpresas();
+    }
+  }, [empresas]);
 
   useEffect(() => {
     if (selectedEmpresaId) {
@@ -51,6 +56,120 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
     }
   }, [selectedCurvaId, curvas]);
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleCancel = () => {
+    const cv = curvas.find(c => c.id === selectedCurvaId);
+    if (cv) {
+      setEditableCurve(JSON.parse(JSON.stringify(cv.curve)));
+      setEditableMetas(JSON.parse(JSON.stringify(cv.metas)));
+    }
+    setIsEditing(false);
+  };
+
+  const handleMetaChange = (phaseKey: string, newValueStr: string) => {
+    const val = parseFloat(newValueStr);
+    
+    setEditableMetas((prev: any) => {
+      if (!prev) return prev;
+      const updated = { ...prev, [phaseKey]: isNaN(val) ? 0 : val };
+      updated.metaAcumulada = (
+        updated.metaAlojamento + 
+        updated.metaCrescimento1 + 
+        updated.metaCrescimento2 + 
+        updated.metaCrescimento3 + 
+        updated.metaTerminacao1 + 
+        updated.metaTerminacao2
+      );
+      return updated;
+    });
+
+    if (isNaN(val)) return;
+
+    const phaseNames: Record<string, string> = {
+      metaAlojamento: 'Alojamento',
+      metaCrescimento1: 'Crescimento 1',
+      metaCrescimento2: 'Crescimento 2',
+      metaCrescimento3: 'Crescimento 3',
+      metaTerminacao1: 'Terminação 1',
+      metaTerminacao2: 'Terminação 2'
+    };
+    
+    const phaseName = phaseNames[phaseKey];
+    if (phaseName && config?.programa_alimentar) {
+      const prog = config.programa_alimentar.find((p: any) => p.nome.toLowerCase() === phaseName.toLowerCase() || p.racao.toLowerCase() === phaseName.toLowerCase());
+      if (prog) {
+         // To avoid shape collapse on 0, we only apply proportional changes if oldMeta is > 0 and val > 0.
+         // If a user types 0, it becomes 0. If they type a number after, they must cancel to restore the curve shape.
+         const oldMeta = editableMetas[phaseKey];
+         if (oldMeta > 0 && val >= 0) {
+            const ratio = val / oldMeta;
+            setEditableCurve((prevCurve: any[]) => {
+               const newCurve = [...prevCurve];
+               let currentAcumulado = 0;
+               for (let i = 0; i < newCurve.length; i++) {
+                  const day = newCurve[i].dia;
+                  if (day >= prog.dia_inicio && day <= prog.dia_fim) {
+                     newCurve[i] = { ...newCurve[i], cmd: newCurve[i].cmd * ratio };
+                  }
+                  currentAcumulado += newCurve[i].cmd;
+                  newCurve[i] = { ...newCurve[i], consumoAcumulado: currentAcumulado };
+               }
+               return newCurve;
+            });
+         }
+      }
+    }
+  };
+
+  const handleSave = async () => {
+    if (!config || !selectedCurvaId) return;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    const updatedCurvas = curvas.map(c => {
+      if (c.id === selectedCurvaId) {
+        return {
+          ...c,
+          metas: editableMetas,
+          curve: editableCurve
+        };
+      }
+      return c;
+    });
+
+    const payload = {
+      empresa_id: config.empresa_id,
+      curva_desempenho: updatedCurvas,
+      tipo_calculo_curva: config.tipo_calculo_curva,
+      meta_mortalidade: config.meta_mortalidade,
+      medicamentos_permitidos: config.medicamentos_permitidos,
+      causas_mortalidade: config.causas_mortalidade,
+      tecnicos: config.tecnicos,
+      programa_alimentar: config.programa_alimentar
+    };
+
+    try {
+      const { error: err } = await supabase
+        .from('empresa_configuracoes')
+        .upsert(payload, { onConflict: 'empresa_id' });
+
+      if (err) throw err;
+      
+      setSuccess('Curva atualizada com sucesso!');
+      setCurvas(updatedCurvas);
+      setIsEditing(false);
+      setTimeout(() => setSuccess(null), 3000);
+    } catch(err) {
+       console.error(err);
+       setError('Erro ao salvar as metas.');
+    } finally {
+       setSaving(false);
+    }
+  };
+
   const fetchEmpresas = async () => {
     try {
       let query = supabase.from('empresas').select('*').eq('ativo', true).order('nome');
@@ -61,7 +180,7 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
       }
       const { data, error: err } = await query;
       if (err) throw err;
-      setEmpresas(data || []);
+      setEmpresasList(data || []);
       if (data && data.length > 0) setSelectedEmpresaId(data[0].id);
     } catch (err: any) {
       console.error(err);
@@ -79,19 +198,32 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
       
       if (err && err.code !== 'PGRST116') throw err;
 
-      if (data) {
-        setConfig(data);
-        if (data.curva_desempenho && Array.isArray(data.curva_desempenho)) {
+      // Also check local config (which includes hardcoded ones like Mugnol)
+      const localConfigs = getEmpresaConfigsLocal();
+      const localCfg = localConfigs.find((c: any) => c.empresa_id === empId);
+
+      // We merge or prefer local config if there's no data in supabase
+      let activeData = data || localCfg;
+      
+      if (data && localCfg) {
+         if (!data.curva_desempenho || data.curva_desempenho.length === 0 || empId === '00000000-0000-0000-0000-000000000003') {
+            activeData = { ...data, curva_desempenho: localCfg.curva_desempenho };
+         }
+      }
+
+      if (activeData) {
+        setConfig(activeData);
+        if (activeData.curva_desempenho && Array.isArray(activeData.curva_desempenho)) {
            // filter out legacy arrays if they exist, or map them
-           if (data.curva_desempenho.length > 0 && 'dia' in data.curva_desempenho[0]) {
+           if (activeData.curva_desempenho.length > 0 && 'dia' in activeData.curva_desempenho[0]) {
               setCurvas([{
                  id: 'legacy-migrated',
                  nome: 'Curva Legada',
                  dataVigencia: '2000-01-01',
                  tipoLote: 'Misto',
-                 tipoCalculo: data.tipo_calculo_curva || 'DIA_UM',
-                 metaMortalidade: data.meta_mortalidade || 0,
-                 curve: data.curva_desempenho,
+                 tipoCalculo: activeData.tipo_calculo_curva || 'DIA_UM',
+                 metaMortalidade: activeData.meta_mortalidade || 0,
+                 curve: activeData.curva_desempenho,
                  metas: {
                    metaAlojamento: 16.39,
                    metaCrescimento1: 22.97,
@@ -103,7 +235,7 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
                  }
               }]);
            } else {
-              setCurvas(data.curva_desempenho);
+              setCurvas(activeData.curva_desempenho);
            }
         } else {
           setCurvas([]);
@@ -139,7 +271,7 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
   const uniqueGroups = Array.from(new Set(curvas.map(c => c.dataVigencia))).map(dataVigencia => {
     const groupCurves = curvas.filter(c => c.dataVigencia === dataVigencia);
     // Try to find a name that doesn't just describe the sex, or strip it
-    let baseName = groupCurves[0].nome;
+    let baseName = groupCurves[0].nome || 'Curva Padrão';
     
     // Simple heuristic: if name contains Misto, Macho, Femea, strip it
     const cleanName = baseName
@@ -177,7 +309,7 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#2D452B] outline-none transition-colors"
           >
             <option value="">Selecione...</option>
-            {empresas.map(emp => (
+            {empresasList.map(emp => (
               <option key={emp.id} value={emp.id}>{emp.nome}</option>
             ))}
           </select>
@@ -256,8 +388,22 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
         <div className="space-y-6">
           {/* Metas/Phases Edit Table */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider p-3 bg-slate-50 border-b border-slate-200">
-              Metas de Fases (Programas Alimentares)
+            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+              <span>Metas de Fases (Programas Alimentares)</span>
+              {isEditing ? (
+                <div className="flex gap-2">
+                  <button onClick={handleCancel} disabled={saving} className="flex items-center gap-1 px-3 py-1 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 transition-colors">
+                    <X className="w-4 h-4" /> Cancelar
+                  </button>
+                  <button onClick={handleSave} disabled={saving} className="flex items-center gap-1 px-3 py-1 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors">
+                    <Save className="w-4 h-4" /> {saving ? 'Salvando...' : 'Salvar Alterações'}
+                  </button>
+                </div>
+              ) : currentUser?.papel === 'MASTER' ? (
+                <button onClick={() => setIsEditing(true)} className="flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200">
+                  <Edit2 className="w-4 h-4" /> Ajustar Metas e Curva
+                </button>
+              ) : null}
             </h2>
             <div className="overflow-x-auto">
               <table className="w-full text-center text-sm text-slate-600">
@@ -274,14 +420,38 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-semibold bg-white">
                   <tr>
-                    <td className="px-3 py-2">{editableMetas.metaAlojamento.toFixed(2)}</td>
-                    <td className="px-3 py-2">{editableMetas.metaCrescimento1.toFixed(2)}</td>
-                    <td className="px-3 py-2">{editableMetas.metaCrescimento2.toFixed(2)}</td>
-                    <td className="px-3 py-2">{editableMetas.metaCrescimento3.toFixed(2)}</td>
-                    <td className="px-3 py-2">{editableMetas.metaTerminacao1.toFixed(2)}</td>
-                    <td className="px-3 py-2">{editableMetas.metaTerminacao2.toFixed(2)}</td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaAlojamento || ''} onChange={(e) => handleMetaChange('metaAlojamento', e.target.value)} />
+                      ) : (editableMetas.metaAlojamento || 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaCrescimento1 || ''} onChange={(e) => handleMetaChange('metaCrescimento1', e.target.value)} />
+                      ) : (editableMetas.metaCrescimento1 || 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaCrescimento2 || ''} onChange={(e) => handleMetaChange('metaCrescimento2', e.target.value)} />
+                      ) : (editableMetas.metaCrescimento2 || 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaCrescimento3 || ''} onChange={(e) => handleMetaChange('metaCrescimento3', e.target.value)} />
+                      ) : (editableMetas.metaCrescimento3 || 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaTerminacao1 || ''} onChange={(e) => handleMetaChange('metaTerminacao1', e.target.value)} />
+                      ) : (editableMetas.metaTerminacao1 || 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaTerminacao2 || ''} onChange={(e) => handleMetaChange('metaTerminacao2', e.target.value)} />
+                      ) : (editableMetas.metaTerminacao2 || 0).toFixed(2)}
+                    </td>
                     <td className="px-3 py-2 font-bold bg-[#1A3A5B] text-white">
-                      {editableMetas.metaAcumulada.toFixed(2)}
+                      {(editableMetas.metaAcumulada || 0).toFixed(2)}
                     </td>
                   </tr>
                 </tbody>
@@ -293,7 +463,9 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
              <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
               <span>Valores Diários ({editableCurve.length} dias)</span>
-              <span className="text-xs font-normal text-slate-500 bg-slate-100 px-2 py-1 rounded">Visualização Bloqueada</span>
+              <span className={`text-xs font-normal px-2 py-1 rounded ${isEditing ? 'bg-blue-100 text-blue-700' : 'text-slate-500 bg-slate-100'}`}>
+                {isEditing ? 'Visualização Calculada' : 'Visualização Bloqueada'}
+              </span>
             </h2>
             <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
               <table className="w-full text-center text-sm text-slate-600 min-w-[600px] relative">
@@ -311,11 +483,11 @@ export function ReferenceCurve({ currentUser }: ReferenceCurveProps) {
                   {editableCurve.map((row, index) => (
                     <tr key={row.dia} className="hover:bg-slate-50">
                       <td className="px-3 py-1 font-semibold text-slate-800 bg-slate-50">{row.dia}</td>
-                      <td className="px-3 py-1 text-slate-500">{row.pesoInicial.toFixed(2)}</td>
-                      <td className="px-3 py-1 text-slate-500 font-medium">{row.pesoFinal.toFixed(2)}</td>
-                      <td className="px-3 py-1 border-x border-slate-100 font-medium text-emerald-700">{row.gpd.toFixed(3)}</td>
-                      <td className="px-3 py-1 border-x border-slate-100 font-medium text-emerald-700">{row.cmd.toFixed(3)}</td>
-                      <td className="px-3 py-1 font-medium text-blue-600">{row.consumoAcumulado.toFixed(2)}</td>
+                      <td className="px-3 py-1 text-slate-500">{(row.pesoInicial || 0).toFixed(2)}</td>
+                      <td className="px-3 py-1 text-slate-500 font-medium">{(row.pesoFinal || 0).toFixed(2)}</td>
+                      <td className="px-3 py-1 border-x border-slate-100 font-medium text-emerald-700">{(row.gpd || 0).toFixed(3)}</td>
+                      <td className="px-3 py-1 border-x border-slate-100 font-medium text-emerald-700">{(row.cmd || 0).toFixed(3)}</td>
+                      <td className="px-3 py-1 font-medium text-blue-600">{(row.consumoAcumulado || 0).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -9,8 +9,39 @@ export const OFFLINE_QUEUE_KEY = 'suino_dashpro_offline_queue';
 export const OFFLINE_DELETE_VISIT_QUEUE = 'suino_dashpro_offline_delete_visit';
 export const OFFLINE_DELETE_INTEGRADO_QUEUE = 'suino_dashpro_offline_delete_integrado';
 export const OFFLINE_EDIT_INTEGRADO_QUEUE = "suino_dashpro_offline_edit_integrado";
+import { defaultMugnolConfig } from '../mugnolConfig';
+
 export const CONFIGS_KEY = "suino_dashpro_empresa_configs";
-export const getEmpresaConfigsLocal = () => { try { const data = safeStorage.getItem(CONFIGS_KEY); return data ? JSON.parse(data) : []; } catch { return []; } };
+export const getEmpresaConfigsLocal = () => { 
+  try { 
+    const data = safeStorage.getItem(CONFIGS_KEY); 
+    let parsed = data ? JSON.parse(data) : []; 
+    
+    // Ensure Mugnol config is always present if not explicitly saved
+    const mugnolIndex = parsed.findIndex((c: any) => c.empresa_id === defaultMugnolConfig.empresa_id);
+    if (mugnolIndex === -1) {
+      parsed.push(defaultMugnolConfig);
+    } else {
+      // Always ensure we have the specific Mugnol curva and programa alimentar if they are empty
+      if (!parsed[mugnolIndex].curva_desempenho || parsed[mugnolIndex].curva_desempenho.length === 0) {
+        parsed[mugnolIndex].curva_desempenho = defaultMugnolConfig.curva_desempenho;
+      } else {
+         const hasPadrao = parsed[mugnolIndex].curva_desempenho.find((c: any) => c.id === 'mugnol_padrao_2026');
+         if (!hasPadrao) {
+            parsed[mugnolIndex].curva_desempenho.push(defaultMugnolConfig.curva_desempenho[0]);
+         }
+      }
+      
+      if (!parsed[mugnolIndex].programa_alimentar || parsed[mugnolIndex].programa_alimentar.length === 0) {
+        parsed[mugnolIndex].programa_alimentar = defaultMugnolConfig.programa_alimentar;
+      }
+    }
+    
+    return parsed; 
+  } catch { 
+    return [defaultMugnolConfig]; 
+  } 
+};
 
 const EMPRESA_ID = '00000000-0000-0000-0000-000000000000';
 

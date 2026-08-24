@@ -22,20 +22,32 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
   const lote = integrados.find(i => i.id === integradoId);
   const configs = getEmpresaConfigsLocal();
   const currentConfig = configs.find((c: any) => c.empresa_id === lote?.empresaId);
-  const finalMetaMortalidade = currentConfig?.meta_mortalidade || 0.5;
+  const finalMetaMortalidade = (currentConfig?.meta_mortalidade !== undefined && currentConfig?.meta_mortalidade !== null) ? currentConfig.meta_mortalidade : 0.5;
 
   const loteVisits = visits.filter(v => v.integradoId === integradoId).sort((a, b) => (a.idade || 0) - (b.idade || 0));
   const latestVisit = loteVisits.length > 0 ? loteVisits[loteVisits.length - 1] : null;
 
   const maxIdade = Math.max(105, ...(loteVisits.map(v => v.idade || 0)));
+  const maxIdadeVisit = loteVisits.length > 0 ? Math.max(...loteVisits.map(v => v.idade || 0)) : 0;
+  
+  let idadeAtual = maxIdadeVisit;
+  if (lote?.alojamentoDate) {
+    const dataAloj = new Date(lote.alojamentoDate + 'T12:00:00');
+    let dataFim = new Date();
+    if (lote.status === 'Fechado' && lote.fechamentoDate) {
+      dataFim = new Date(lote.fechamentoDate + 'T12:00:00');
+    }
+    const diff = Math.round((dataFim.getTime() - dataAloj.getTime()) / (1000 * 60 * 60 * 24));
+    idadeAtual = Math.max(1, diff);
+  }
   const chartData: any[] = [];
   for (let d = 1; d <= maxIdade; d++) {
      const visit = loteVisits.find(v => v.idade === d);
      const esperado = getExpectedConsumption(d, loteVisits[0]?.tipoLote, loteVisits[0]?.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, undefined, undefined, loteVisits[0]?.date);
      chartData.push({
         idade: d,
-        esperado: esperado ? Number(esperado.toFixed(2)) : null,
-        real: (visit && visit.consumoAcumuladoReal) ? Number(visit.consumoAcumuladoReal) : null
+        esperado: esperado !== null && esperado !== undefined ? Number(esperado.toFixed(2)) : null,
+        real: (visit && visit.consumoAcumuladoReal !== null && visit.consumoAcumuladoReal !== undefined) ? Number(visit.consumoAcumuladoReal) : null
      });
   }
 
@@ -227,6 +239,28 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
         
         // Clone the element and attach to body to bypass any modal/overflow/transform clipping issues
         const clone = el.cloneNode(true) as HTMLElement;
+        
+        // Fix SVG IDs for html2canvas to prevent clip-path/gradient ID conflicts
+        const svgs = clone.querySelectorAll('svg');
+        svgs.forEach((svg, svgIndex) => {
+          const defs = svg.querySelectorAll('defs > *');
+          defs.forEach(def => {
+            if (def.id) {
+              const oldId = def.id;
+              const newId = `${oldId}-clone-${i}-${svgIndex}`;
+              def.id = newId;
+              
+              // Find and replace all references to this ID in the clone
+              const elementsWithUrl = clone.querySelectorAll(`[fill="url(#${oldId})"], [stroke="url(#${oldId})"], [clip-path="url(#${oldId})"]`);
+              elementsWithUrl.forEach(elRef => {
+                if (elRef.getAttribute('fill') === `url(#${oldId})`) elRef.setAttribute('fill', `url(#${newId})`);
+                if (elRef.getAttribute('stroke') === `url(#${oldId})`) elRef.setAttribute('stroke', `url(#${newId})`);
+                if (elRef.getAttribute('clip-path') === `url(#${oldId})`) elRef.setAttribute('clip-path', `url(#${newId})`);
+              });
+            }
+          });
+        });
+
         document.body.appendChild(clone);
         
         clone.style.position = 'fixed';
@@ -272,7 +306,7 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
           <h2 className="text-xl font-bold text-slate-800 mb-1">{lote?.name}</h2>
           <p className="text-sm text-slate-600"><strong>Data Alojamento:</strong> {new Date((lote?.alojamentoDate||'') + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
           {lote?.fechamentoDate && <p className="text-sm text-slate-600"><strong>Data Fechamento:</strong> {new Date(lote.fechamentoDate + 'T12:00:00').toLocaleDateString('pt-BR')}</p>}
-          <p className="text-sm font-semibold text-slate-700 mt-1">Duração Atual: {maxIdade} dias</p>
+          <p className="text-sm font-semibold text-slate-700 mt-1">Idade Atual: {idadeAtual} dias</p>
         </div>
       </div>
 

@@ -655,7 +655,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  <td className="px-4 py-3 text-slate-600 text-center">{row.idade} d</td>
  <td className="px-4 py-3 text-right font-medium">
  {activeKpiModal === 'mortalidade' ? (
- <span className={`${mVal > 3 ? 'text-red-600' : 'text-slate-700'}`}>
+ <span className={`${mVal > (configs.find((c: any) => c.empresa_id === integrados.find(i => i.id === row.integradoId)?.empresaId)?.meta_mortalidade ?? 3) ? 'text-red-600' : 'text-slate-700'}`}>
  {mVal.toFixed(2)}%
  </span>
  ) : (
@@ -740,8 +740,8 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  ] as any[]}
  />
  )}
- <Area type="monotone" dataKey="consumoEsperadoRange" name="Margem de Erro (±5kg)" stroke="none" fill="#cbd5e1" fillOpacity={0.3} activeDot={false} />
- <Line type="monotone" dataKey="consumoEsperado" name="Curva Alvo" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+ <Area isAnimationActive={!isExporting} type="monotone" dataKey="consumoEsperadoRange" name="Margem de Erro (±5kg)" stroke="none" fill="#cbd5e1" fillOpacity={0.3} activeDot={false} />
+ <Line isAnimationActive={!isExporting} type="monotone" dataKey="consumoEsperado" name="Curva Alvo" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" dot={false} />
  {filteredIntegrados.map((integrado, index) => {
  const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
  
@@ -755,7 +755,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  };
 
  return (
- <Line 
+ <Line isAnimationActive={!isExporting} 
  key={integrado.id} 
  type="monotone" 
  dataKey={integrado.id} 
@@ -785,7 +785,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
  formatter={(value: any) => [`${value > 0 ? '+' : ''}${Number(value).toFixed(2)} kg`, 'Diferença']}
  />
- <Bar dataKey="diferenca" name="Diferença vs Alvo" radius={[4, 4, 0, 0]}>
+ <Bar isAnimationActive={!isExporting} dataKey="diferenca" name="Diferença vs Alvo" radius={[4, 4, 0, 0]}>
  {
  latestVisitsData.map((entry, index) => (
  <Cell key={`cell-${index}`} fill={(Math.abs(entry.diferenca) <= 5) ? '#3b82f6' : entry.diferenca < -5 ? '#10b981' : '#ef4444'} />
