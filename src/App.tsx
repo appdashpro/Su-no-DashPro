@@ -260,7 +260,7 @@ export default function App() {
  const loadData = useCallback(async () => {
  await restoreBackupFromIndexedDB();
  storage.migrateIds();
- seedTestLots();
+ // seedTestLots(); // Removed to prevent demo data from respawning after deletion
 
  try {
    // Immediately populate UI from fast local cache

@@ -274,7 +274,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
             await supabase.from('tratamentos').delete().eq('lote_id', id);
             const { error: delErr } = await supabase.from('lotes').delete().eq('id', id);
             if (delErr) throw delErr;
-          } catch (delErr) {
+          } catch (delErr: any) {
             console.error('Erro ao sincronizar exclusão de lote:', delErr);
             if (delErr && (delErr.message && (delErr.message.includes('fetch') || delErr.message.includes('network') || delErr.message.includes('timeout')) || delErr.code === '0')) {
                 remainingDelIntQueue.push(id);
@@ -299,7 +299,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
             if (err2) throw err2;
             const { error: err3 } = await supabase.from('visitas').delete().eq('id', id);
             if (err3) throw err3;
-          } catch (delErr) {
+          } catch (delErr: any) {
             console.error('Erro ao sincronizar exclusão de visita:', delErr);
             if (delErr && (delErr.message && (delErr.message.includes('fetch') || delErr.message.includes('network') || delErr.message.includes('timeout')) || delErr.code === '0')) {
                 remainingDelVisitQueue.push(id);
@@ -333,7 +333,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
               
               // Add back items that were in the queue we tried to process
               for (const v of queue) {
-                  if (!currentQueue.find((q) => q.id === v.id)) {
+                  if (!currentQueue.find((q: any) => q.id === v.id)) {
                       currentQueue.push(v);
                   }
               }
@@ -571,7 +571,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
       if (finalVisits.length > 0) {
         safeStorage.setItem(VISITS_KEY, JSON.stringify(finalVisits));
       }
-      safeStorage.setItem('lastSync', new Date().toISOString());
+      safeStorage.setItem('LAST_SYNC_TIME', new Date().toISOString());
       
       window.dispatchEvent(new Event('sync-completed'));
       return true;
