@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Empresa, EmpresaConfig, UserProfile, CurveConfig } from '../types';
-import { Save, AlertCircle, Plus, Trash2, Settings, X, RotateCcw } from 'lucide-react';
-import { DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE, DEFAULT_TECNICOS, growthCurvesMisto, growthCurveFemea, defaultMetas, defaultMetasFemea } from '../data';
+import { Save, AlertCircle, Plus, Trash2, Settings, X, RotateCcw, Check } from 'lucide-react';
+import { defaultPastreProgramaAlimentar, defaultBugioProgramaAlimentar, DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE, DEFAULT_TECNICOS, growthCurvesMisto, growthCurveFemea, defaultMetas, defaultMetasFemea } from '../data';
 import { getEmpresaConfigsLocal } from '../lib/storage';
 
 interface EmpresaConfigGestaoProps {
@@ -46,6 +46,34 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
       setConfig(null);
     }
   }, [selectedEmpresaId]);
+
+  const isDirty = React.useMemo(() => {
+    if (!selectedEmpresaId) return false;
+    
+    // Default fallback calculation if config doesn't exist
+    const emp = empresasList.length > 0 ? empresasList.find(e => e.id === selectedEmpresaId) : empresas.find(e => e.id === selectedEmpresaId);
+    const isPastre = emp?.nome ? emp.nome.toLowerCase().includes('pastre') : false;
+
+    const baseTipoCalculo = config?.tipo_calculo_curva || 'DIA_UM';
+    const baseMetaMortalidade = config?.meta_mortalidade || 0;
+    const baseMedicamentos = (config?.medicamentos_permitidos && config.medicamentos_permitidos.length > 0) ? config.medicamentos_permitidos : DEFAULT_MEDICAMENTOS_PERMITIDOS;
+    const baseCausas = (config?.causas_mortalidade && config.causas_mortalidade.length > 0) ? config.causas_mortalidade : DEFAULT_CAUSAS_MORTALIDADE;
+    const baseTecnicos = (config?.tecnicos !== undefined && config.tecnicos !== null) ? config.tecnicos : (isPastre ? DEFAULT_TECNICOS : []);
+
+    const arraysEqual = (a, b) => {
+      if (a.length !== b.length) return false;
+      const sortedA = [...a].sort();
+      const sortedB = [...b].sort();
+      return sortedA.every((val, index) => val === sortedB[index]);
+    };
+
+    return tipoCalculo !== baseTipoCalculo || 
+           metaMortalidade !== baseMetaMortalidade ||
+           !arraysEqual(medicamentos, baseMedicamentos) ||
+           !arraysEqual(causas, baseCausas) ||
+           !arraysEqual(tecnicos, baseTecnicos);
+
+  }, [config, selectedEmpresaId, tipoCalculo, metaMortalidade, medicamentos, causas, tecnicos, empresasList, empresas]);
 
   const fetchEmpresas = async () => {
     setLoading(true);
@@ -99,6 +127,13 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
       }
 
       if (activeData) {
+        if (empresaId === '00000000-0000-0000-0000-000000000001') {
+           activeData.programa_alimentar = defaultPastreProgramaAlimentar;
+        } else if (empresaId === '00000000-0000-0000-0000-000000000002') {
+           activeData.programa_alimentar = defaultBugioProgramaAlimentar;
+        } else if (!activeData.programa_alimentar || activeData.programa_alimentar.length === 0) {
+           activeData.programa_alimentar = defaultPastreProgramaAlimentar;
+        }
         setConfig(activeData);
         setTipoCalculo(activeData.tipo_calculo_curva || 'DIA_UM');
         setMetaMortalidade(activeData.meta_mortalidade || 0);
@@ -215,7 +250,20 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-100">
-          <label className="block text-sm font-semibold text-slate-700 mb-2">Selecione o Cliente</label>
+          <div className="flex justify-between items-center mb-2">
+            <label className="block text-sm font-semibold text-slate-700">Selecione o Cliente</label>
+            {selectedEmpresaId && (
+              isDirty ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                  <AlertCircle className="w-3.5 h-3.5" /> Alterações não salvas
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <Check className="w-3.5 h-3.5" /> Configuração Em Utilização (Base de Cálculo)
+                </span>
+              )
+            )}
+          </div>
           <select
             value={selectedEmpresaId}
             onChange={(e) => setSelectedEmpresaId(e.target.value)}

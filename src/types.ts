@@ -20,6 +20,8 @@ export interface CurveConfig {
   fase?: string;
   tipoCalculo: 'DIA_UM' | 'PESO_ALOJAMENTO';
   metaMortalidade: number;
+  last_modified_by?: string;
+  last_modified_at?: string;
   curve: any[]; // GrowthCurvePoint[]
   metas: MetasCurva;
 }

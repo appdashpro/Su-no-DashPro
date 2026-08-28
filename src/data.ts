@@ -1,3 +1,5 @@
+import { defaultBugioProgramaAlimentar, defaultMetasBugio, growthCurveBugio } from './bugioData';
+export { defaultBugioProgramaAlimentar, defaultMetasBugio, growthCurveBugio };
 import { GrowthCurvePoint, Integrado, Visit } from './types';
 import { pdfData } from './pdf-data';
 
@@ -918,16 +920,23 @@ const growthCurveV2: GrowthCurvePoint[] = [
   }
 ];
 const defaultMetasV2 = {
-  "metaAlojamento": 17.66,
+  "metaAlojamento": 17.65,
   "metaCrescimento1": 30.79,
   "metaCrescimento2": 29.57,
   "metaCrescimento3": 44.06,
-  "metaTerminacao1": 27.32,
-  "metaTerminacao2": 67.95,
-  "metaAcumulada": 217.34
+  "metaTerminacao1": 27.52,
+  "metaTerminacao2": 63.52,
+  "metaAcumulada": 213.11
 };
 
 export const growthCurvesMisto: CurveVersion[] = [
+  {
+    version: 'bugio',
+    nome: 'Curva Bugio',
+    effectiveDate: '2026-08-01',
+    curve: growthCurveBugio,
+    metas: defaultMetasBugio,
+  },
   {
     version: 'v1',
     effectiveDate: '2026-01-01',
@@ -1277,3 +1286,12 @@ export const DEFAULT_CAUSAS_MORTALIDADE: string[] = [
 ];
 
 export const DEFAULT_TECNICOS: string[] = ['Wagner', 'Helio', 'Alessandro', 'Roger', 'João', 'Luana', 'Adelio'];
+
+export const defaultPastreProgramaAlimentar = [
+  { nome: 'Alojamento', dia_inicio: 1, dia_fim: 14, racao: 'Alojamento' },
+  { nome: 'Crescimento 1', dia_inicio: 15, dia_fim: 32, racao: 'Crescimento 1' },
+  { nome: 'Crescimento 2', dia_inicio: 33, dia_fim: 46, racao: 'Crescimento 2' },
+  { nome: 'Crescimento 3', dia_inicio: 47, dia_fim: 64, racao: 'Crescimento 3' },
+  { nome: 'Terminação 1', dia_inicio: 65, dia_fim: 74, racao: 'Terminação 1' },
+  { nome: 'Terminação 2', dia_inicio: 75, dia_fim: 96, racao: 'Terminação 2' }
+];

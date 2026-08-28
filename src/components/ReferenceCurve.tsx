@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Empresa, EmpresaConfig, CurveConfig, UserProfile } from '../types';
 import { AlertCircle, Check, Save, Edit2, X } from 'lucide-react';
 import { getEmpresaConfigsLocal } from '../lib/storage';
+import { growthCurvesMisto, defaultPastreProgramaAlimentar, defaultBugioProgramaAlimentar } from '../data';
 
 interface ReferenceCurveProps {
   currentUser?: UserProfile | null;
@@ -98,7 +99,7 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
     
     const phaseName = phaseNames[phaseKey];
     if (phaseName && config?.programa_alimentar) {
-      const prog = config.programa_alimentar.find((p: any) => p.nome.toLowerCase() === phaseName.toLowerCase() || p.racao.toLowerCase() === phaseName.toLowerCase());
+      const prog = config.programa_alimentar.find((p: any) => (p.nome && p.nome.toLowerCase() === phaseName.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phaseName.toLowerCase()));
       if (prog) {
          // To avoid shape collapse on 0, we only apply proportional changes if oldMeta is > 0 and val > 0.
          // If a user types 0, it becomes 0. If they type a number after, they must cancel to restore the curve shape.
@@ -134,7 +135,9 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
         return {
           ...c,
           metas: editableMetas,
-          curve: editableCurve
+          curve: editableCurve,
+          last_modified_by: currentUser?.nome || currentUser?.email || 'Usuário Desconhecido',
+          last_modified_at: new Date().toISOString()
         };
       }
       return c;
@@ -212,6 +215,56 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
       }
 
       if (activeData) {
+        // --- PROGRAMA ALIMENTAR PASTRE HOTFIX ---
+        if (empId === '00000000-0000-0000-0000-000000000001') {
+           activeData.programa_alimentar = defaultPastreProgramaAlimentar;
+        } else if (empId === '00000000-0000-0000-0000-000000000002') {
+           activeData.programa_alimentar = defaultBugioProgramaAlimentar;
+        } else if (!activeData.programa_alimentar || activeData.programa_alimentar.length === 0) {
+           activeData.programa_alimentar = defaultPastreProgramaAlimentar;
+        }
+
+        // --- V2 HOTFIX FOR PASTRE ---
+        if (activeData.curva_desempenho && Array.isArray(activeData.curva_desempenho)) {
+           const v2Index = activeData.curva_desempenho.findIndex((c: any) => c.version === 'v2' || (c.nome && c.nome.toLowerCase().includes('v2')));
+           if (v2Index !== -1) {
+             // Force overwrite curve and metas with the official V2 from source code
+             const officialV2 = growthCurvesMisto.find(c => c.version === 'v2');
+             if (officialV2) {
+               activeData.curva_desempenho[v2Index].curve = officialV2.curve;
+               activeData.curva_desempenho[v2Index].metas = officialV2.metas;
+             }
+           }
+        }
+        // -----------------------------
+        // --- BUGIO HOTFIX ---
+        if (empId === '00000000-0000-0000-0000-000000000002') {
+            if (!activeData.curva_desempenho || activeData.curva_desempenho.length === 0 || !activeData.curva_desempenho.find((c: any) => c.version === 'bugio' || (c.nome && c.nome.toLowerCase().includes('bugio')))) {
+               const officialBugio = growthCurvesMisto.find(c => c.version === 'bugio');
+               if (officialBugio) {
+                   activeData.curva_desempenho = activeData.curva_desempenho || [];
+                   activeData.curva_desempenho.push({
+                       id: 'bugio-curve',
+                       nome: 'Curva Bugio',
+                       dataVigencia: officialBugio.effectiveDate,
+                       tipoLote: 'Misto',
+                       version: 'bugio',
+                       tipoCalculo: 'DIA_UM',
+                       metaMortalidade: activeData.meta_mortalidade || 0,
+                       curve: officialBugio.curve,
+                       metas: officialBugio.metas
+                   });
+               }
+            } else {
+               const bugioIndex = activeData.curva_desempenho.findIndex((c: any) => c.version === 'bugio' || (c.nome && c.nome.toLowerCase().includes('bugio')));
+               const officialBugio = growthCurvesMisto.find(c => c.version === 'bugio');
+               if (officialBugio) {
+                   activeData.curva_desempenho[bugioIndex].curve = officialBugio.curve;
+                   activeData.curva_desempenho[bugioIndex].metas = officialBugio.metas;
+               }
+            }
+        }
+
         setConfig(activeData);
         if (activeData.curva_desempenho && Array.isArray(activeData.curva_desempenho)) {
            // filter out legacy arrays if they exist, or map them
@@ -254,7 +307,16 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
 
   useEffect(() => {
     if (curvas.length > 0 && !selectedCurvaId) {
-      setSelectedCurvaId(curvas[0].id);
+      const today = new Date().toISOString().split('T')[0];
+      const validCurves = [...curvas]
+        .filter(c => c.dataVigencia <= today)
+        .sort((a, b) => b.dataVigencia.localeCompare(a.dataVigencia));
+      
+      if (validCurves.length > 0) {
+        setSelectedCurvaId(validCurves[0].id);
+      } else {
+        setSelectedCurvaId(curvas[0].id);
+      }
     }
   }, [curvas]);
 
@@ -290,13 +352,66 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
     : [];
 
   const selectedCurva = currentCurva;
+  
+  const todayDate = new Date().toISOString().split('T')[0];
+  const activeDateKey = [...curvas].filter(c => c.dataVigencia <= todayDate).sort((a, b) => b.dataVigencia.localeCompare(a.dataVigencia))[0]?.dataVigencia;
+  const isActiveGroup = currentGroupKey === activeDateKey;
+
+  const getPhaseDuration = (phaseName: string) => {
+    if (!config || !config.programa_alimentar) return '-';
+    const prog = config.programa_alimentar.find((p: any) => (p.nome && p.nome.toLowerCase() === phaseName.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phaseName.toLowerCase()));
+    if (prog) {
+      const dias = (Number(prog.dia_fim) - Number(prog.dia_inicio)) + 1;
+      return `${dias}`;
+    }
+    return '-';
+  };
+
+  const getPhaseAge = (phaseName: string) => {
+    if (!config || !config.programa_alimentar) return '-';
+    const prog = config.programa_alimentar.find((p: any) => (p.nome && p.nome.toLowerCase() === phaseName.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phaseName.toLowerCase()));
+    if (prog) {
+      return `${prog.dia_inicio} a ${prog.dia_fim}`;
+    }
+    return '-';
+  };
+
+  const getTotalDuration = () => {
+    if (!config || !config.programa_alimentar) return '-';
+    let total = 0;
+    const phases = ['Alojamento', 'Crescimento 1', 'Crescimento 2', 'Crescimento 3', 'Terminação 1', 'Terminação 2'];
+    phases.forEach(phase => {
+      const prog = config.programa_alimentar.find((p: any) => (p.nome && p.nome.toLowerCase() === phase.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phase.toLowerCase()));
+      if (prog) {
+        total += (Number(prog.dia_fim) - Number(prog.dia_inicio)) + 1;
+      }
+    });
+    return total > 0 ? total : '-';
+  };
+
+  const getTotalAge = () => {
+    if (!config || !config.programa_alimentar) return '-';
+    let min = Infinity;
+    let max = -Infinity;
+    const phases = ['Alojamento', 'Crescimento 1', 'Crescimento 2', 'Crescimento 3', 'Terminação 1', 'Terminação 2'];
+    let found = false;
+    phases.forEach(phase => {
+      const prog = config.programa_alimentar.find((p: any) => (p.nome && p.nome.toLowerCase() === phase.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phase.toLowerCase()));
+      if (prog) {
+        if (prog.dia_inicio < min) min = prog.dia_inicio;
+        if (prog.dia_fim > max) max = prog.dia_fim;
+        found = true;
+      }
+    });
+    return found ? `${min} a ${max}` : '-';
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Gerenciar Curvas de Consumo</h1>
-          <p className="text-slate-500 mt-1">Ajuste os valores diários de consumo e ganho de peso para a versão selecionada.</p>
+          <p className="text-slate-500 mt-1">Ajuste os valores diários de consumo e ganho de peso. Os dados marcados como <strong>"Em Utilização"</strong> são a base de cálculo atual do app.</p>
         </div>
       </div>
 
@@ -316,7 +431,18 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <label className="block text-sm font-semibold text-slate-700 mb-3">Versão da Curva (Visualização)</label>
+          <div className="flex justify-between items-center mb-3">
+            <label className="block text-sm font-semibold text-slate-700">Versão da Curva (Visualização)</label>
+            {(isActiveGroup && !isEditing) ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <Check className="w-3 h-3" /> Em Utilização Atual
+              </span>
+            ) : isEditing ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                <AlertCircle className="w-3 h-3" /> Alterações não salvas
+              </span>
+            ) : null}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Data / Versão</label>
@@ -337,7 +463,7 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
               >
                 {curvas.length === 0 ? <option value="">Nenhuma curva</option> : null}
                 {uniqueGroups.map(g => (
-                  <option key={g.key} value={g.key}>{g.nome} ({new Date(g.dataVigencia + 'T12:00:00').toLocaleDateString('pt-BR')})</option>
+                  <option key={g.key} value={g.key}>{g.nome} ({new Date(g.dataVigencia + 'T12:00:00').toLocaleDateString('pt-BR')}) {g.dataVigencia === activeDateKey ? (isEditing ? '(!)' : '✓ EM UTILIZAÇÃO') : ''}</option>
                 ))}
               </select>
             </div>
@@ -388,8 +514,15 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
         <div className="space-y-6">
           {/* Metas/Phases Edit Table */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-              <span>Metas de Fases (Programas Alimentares)</span>
+            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
+              <div className="flex flex-col">
+                <span>Metas de Fases (Programas Alimentares)</span>
+                {curvas.find(c => c.id === selectedCurvaId)?.last_modified_by && (
+                  <span className="text-[10px] text-slate-400 font-normal mt-0.5 normal-case tracking-normal">
+                    Última alteração por: {curvas.find(c => c.id === selectedCurvaId)?.last_modified_by} em {new Date(curvas.find(c => c.id === selectedCurvaId)?.last_modified_at || '').toLocaleString('pt-BR')}
+                  </span>
+                )}
+              </div>
               {isEditing ? (
                 <div className="flex gap-2">
                   <button onClick={handleCancel} disabled={saving} className="flex items-center gap-1 px-3 py-1 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 transition-colors">
@@ -409,43 +542,45 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
               <table className="w-full text-center text-sm text-slate-600">
                 <thead className="bg-[#2D452B] text-white font-medium border-b border-slate-200">
                   <tr>
-                    <th className="px-3 py-2 text-xs">Aloj (kg)</th>
-                    <th className="px-3 py-2 text-xs">C1 (kg)</th>
-                    <th className="px-3 py-2 text-xs">C2 (kg)</th>
-                    <th className="px-3 py-2 text-xs">C3 (kg)</th>
-                    <th className="px-3 py-2 text-xs">T1 (kg)</th>
-                    <th className="px-3 py-2 text-xs">T2 (kg)</th>
-                    <th className="px-3 py-2 text-xs bg-[#1A3A5B]">Total (kg)</th>
+                    <th className="px-3 py-2 text-xs text-left">Indicador</th>
+                    <th className="px-3 py-2 text-xs">Alojamento</th>
+                    <th className="px-3 py-2 text-xs">Cresc 1</th>
+                    <th className="px-3 py-2 text-xs">Cresc 2</th>
+                    <th className="px-3 py-2 text-xs">Cresc 3</th>
+                    <th className="px-3 py-2 text-xs">Term 1</th>
+                    <th className="px-3 py-2 text-xs">Term 2</th>
+                    <th className="px-3 py-2 text-xs bg-[#1A3A5B]">Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 font-semibold bg-white">
+                <tbody className="divide-y divide-slate-100 bg-white">
                   <tr>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-slate-700 font-semibold text-xs text-left border-r border-slate-100 bg-slate-50">Meta (kg)</td>
+                    <td className="px-3 py-2 font-semibold">
                       {isEditing ? (
                         <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaAlojamento || ''} onChange={(e) => handleMetaChange('metaAlojamento', e.target.value)} />
                       ) : (editableMetas.metaAlojamento || 0).toFixed(2)}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 font-semibold">
                       {isEditing ? (
                         <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaCrescimento1 || ''} onChange={(e) => handleMetaChange('metaCrescimento1', e.target.value)} />
                       ) : (editableMetas.metaCrescimento1 || 0).toFixed(2)}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 font-semibold">
                       {isEditing ? (
                         <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaCrescimento2 || ''} onChange={(e) => handleMetaChange('metaCrescimento2', e.target.value)} />
                       ) : (editableMetas.metaCrescimento2 || 0).toFixed(2)}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 font-semibold">
                       {isEditing ? (
                         <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaCrescimento3 || ''} onChange={(e) => handleMetaChange('metaCrescimento3', e.target.value)} />
                       ) : (editableMetas.metaCrescimento3 || 0).toFixed(2)}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 font-semibold">
                       {isEditing ? (
                         <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaTerminacao1 || ''} onChange={(e) => handleMetaChange('metaTerminacao1', e.target.value)} />
                       ) : (editableMetas.metaTerminacao1 || 0).toFixed(2)}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 font-semibold">
                       {isEditing ? (
                         <input type="number" step="0.01" className="w-16 md:w-20 px-1 py-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-blue-500" value={editableMetas.metaTerminacao2 || ''} onChange={(e) => handleMetaChange('metaTerminacao2', e.target.value)} />
                       ) : (editableMetas.metaTerminacao2 || 0).toFixed(2)}
@@ -454,6 +589,26 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
                       {(editableMetas.metaAcumulada || 0).toFixed(2)}
                     </td>
                   </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-slate-700 font-semibold text-xs text-left border-r border-slate-100 bg-slate-50">Duração (dias)</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseDuration('Alojamento')}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseDuration('Crescimento 1')}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseDuration('Crescimento 2')}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseDuration('Crescimento 3')}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseDuration('Terminação 1')}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseDuration('Terminação 2')}</td>
+                    <td className="px-3 py-2 text-xs font-bold bg-[#1A3A5B] text-white">{getTotalDuration()}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-slate-700 font-semibold text-xs text-left border-r border-slate-100 bg-slate-50">Idade (dias)</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Alojamento')}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Crescimento 1')}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Crescimento 2')}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Crescimento 3')}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Terminação 1')}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Terminação 2')}</td>
+                    <td className="px-3 py-2 text-xs font-bold bg-[#1A3A5B] text-white">{getTotalAge()}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -461,8 +616,15 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
 
           {/* 120 Days Curve Table */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-             <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-              <span>Valores Diários ({editableCurve.length} dias)</span>
+             <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
+              <div className="flex flex-col">
+                <span>Valores Diários ({editableCurve.length} dias)</span>
+                {curvas.find(c => c.id === selectedCurvaId)?.last_modified_by && (
+                  <span className="text-[10px] text-slate-400 font-normal mt-0.5 normal-case tracking-normal">
+                    Última alteração por: {curvas.find(c => c.id === selectedCurvaId)?.last_modified_by} em {new Date(curvas.find(c => c.id === selectedCurvaId)?.last_modified_at || '').toLocaleString('pt-BR')}
+                  </span>
+                )}
+              </div>
               <span className={`text-xs font-normal px-2 py-1 rounded ${isEditing ? 'bg-blue-100 text-blue-700' : 'text-slate-500 bg-slate-100'}`}>
                 {isEditing ? 'Visualização Calculada' : 'Visualização Bloqueada'}
               </span>
