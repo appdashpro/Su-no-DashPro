@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Visit, Integrado, GrowthCurvePoint } from '../types';
 import { getActiveCurve } from '../data';
+import { getEmpresaConfigsLocal } from '../lib/storage';
 import { TrendingUp, Syringe, AlertCircle, Search, Pill, Calendar, Download } from 'lucide-react';
 import { format, subDays, subMonths, subYears, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -31,6 +32,7 @@ interface EnrichedTreatment {
 }
 
 export function MedicationAnalysis({ visits, integrados }: Props) {
+  const configs = getEmpresaConfigsLocal();
   const [searchTerm, setSearchTerm] = useState('');
   const [period, setPeriod] = useState('6m');
 
@@ -45,7 +47,8 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
 
       let basePesoEstimadoKg = visit.pesoAmostradoKg || 0;
       if (basePesoEstimadoKg <= 0) {
-        const { curve } = getActiveCurve(integrado.alojamentoDate || visit.date, 'Em andamento', visit.tipoLote || 'Misto', undefined, undefined, undefined, visit.date);
+        const currentConfig = configs.find(c => c.empresa_id === integrado.empresaId);
+        const { curve } = getActiveCurve(integrado.alojamentoDate || visit.date, 'Em andamento', visit.tipoLote || 'Misto', undefined, currentConfig, visit.curva_consumo_id, visit.date);
         const expectedPoint = curve.find((p: GrowthCurvePoint) => p.dia >= (visit.idade || 0));
         basePesoEstimadoKg = expectedPoint ? expectedPoint.pesoInicial : 0;
       }

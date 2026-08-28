@@ -34,6 +34,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  });
  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
  const [isExporting, setIsExporting] = useState(false);
+  const [showPreviousCurve, setShowPreviousCurve] = useState(false);
  const [activeKpiModal, setActiveKpiModal] = useState<'total' | 'alertas' | 'desvio' | 'mortalidade' | null>(null);
  const dropdownRef = useRef<HTMLDivElement>(null);
  const dashboardRef = useRef<HTMLDivElement>(null);
@@ -147,6 +148,15 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
     let singleAlojamentoDate: string | undefined = undefined;
     let singleStatus: string | undefined = undefined;
     let singleFechamentoDate: string | undefined = undefined;
+    let chartConfig: any = undefined;
+
+    if (filteredIntegrados.length > 0) {
+      const firstEmpresaId = filteredIntegrados[0].empresaId;
+      const allSameEmpresa = filteredIntegrados.every(i => i.empresaId === firstEmpresaId);
+      if (allSameEmpresa && firstEmpresaId) {
+        chartConfig = configs.find(c => c.empresa_id === firstEmpresaId);
+      }
+    }
 
     if (filteredIntegrados.length === 1) {
       const single = filteredIntegrados[0];
@@ -216,8 +226,19 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
         return calculateVisitAge(v, matched) === idade;
       });
       
-      // Calculate expected consumption using reactive Cargill curve utilities
-      const sampleVisit = visitsAtAge[0];
+      let dDateStr = singleAlojamentoDate || '2000-01-01';
+      if (singleAlojamentoDate) {
+         const dDate = new Date(singleAlojamentoDate + 'T12:00:00');
+         dDate.setDate(dDate.getDate() + (idade - 1));
+         dDateStr = dDate.toISOString().split('T')[0];
+      }
+
+      let previousCurveDate = '2000-01-01';
+      if (chartConfig?.curva_desempenho && Array.isArray(chartConfig.curva_desempenho) && chartConfig.curva_desempenho.length > 1) {
+        const sorted = [...chartConfig.curva_desempenho].sort((a: any, b: any) => a.dataVigencia.localeCompare(b.dataVigencia));
+        previousCurveDate = sorted[0].dataVigencia;
+      }
+
       const expected = getExpectedConsumption(
         idade, 
         dominantTipoLote, 
@@ -225,16 +246,33 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
         singleAlojamentoDate, 
         singleStatus, 
         singleFechamentoDate,
+        chartConfig,
         undefined,
+        dDateStr
+      );
+
+      const expectedAnterior = getExpectedConsumption(
+        idade, 
+        dominantTipoLote, 
+        avgPesoAloj, 
+        singleAlojamentoDate, 
+        singleStatus, 
+        singleFechamentoDate,
+        chartConfig,
         undefined,
-        sampleVisit?.date
+        previousCurveDate
       );
       
       const dataPoint: any = {
         idade,
-        consumoEsperado: expected,
-        consumoEsperadoRange: [Math.max(0, expected - 5), expected + 5]
       };
+      if (expected > 0) {
+        dataPoint.consumoEsperado = expected;
+        dataPoint.consumoEsperadoRange = [Math.max(0, expected - 5), expected + 5];
+      }
+      if (expectedAnterior > 0) {
+        dataPoint.esperadoAnterior = expectedAnterior;
+      }
       
       visitsAtAge.forEach(v => {
         const matched = filteredIntegrados.find(i => isVisitForIntegrado(v, i));
@@ -279,6 +317,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
       .map(({ visit: v, age, realConsumo }) => {
         const integrado = filteredIntegrados.find(i => isVisitForIntegrado(v, i));
         
+        const currentConfig = configs.find(c => c.empresa_id === integrado?.empresaId);
         const expected = getExpectedConsumption(
           age,
           v.tipoLote,
@@ -286,7 +325,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
           integrado?.alojamentoDate,
           integrado?.status,
           integrado?.fechamentoDate,
-          undefined,
+          currentConfig,
           undefined,
           v.date
         );
@@ -311,8 +350,8 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
           date: v.date,
           idade: age,
           consumoReal: realConsumo,
-          consumoEsperado: expected,
-          diferenca: Number((realConsumo - expected).toFixed(2)),
+          consumoEsperado: expected > 0 ? expected : null,
+          diferenca: expected > 0 ? Number((realConsumo - expected).toFixed(2)) : 0,
           mortalidade: mortPct,
           animaisMortos: v.animaisMortos,
           animaisAlojados: v.animaisAlojados,
@@ -680,7 +719,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  {/* Charts */}
  <div className="flex flex-col gap-6">
  <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm h-[400px] lg:h-[500px] xl:h-[600px] min-w-0">
- <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Consumo Real vs Tabela (por Idade)</h2>
+ <div className="flex justify-between items-center mb-4"><h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Consumo Real vs Tabela (por Idade)</h2><button onClick={() => setShowPreviousCurve(!showPreviousCurve)} className={`text-xs font-semibold px-3 py-1.5 rounded transition-colors ${showPreviousCurve ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{showPreviousCurve ? 'Ocultar Curva Anterior' : 'Mostrar Curva Anterior'}</button></div>
  <ResponsiveContainer width="100%" height="100%">
  <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 35, left: 0 }}>
  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -742,6 +781,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  )}
  <Area isAnimationActive={!isExporting} type="monotone" dataKey="consumoEsperadoRange" name="Margem de Erro (±5kg)" stroke="none" fill="#cbd5e1" fillOpacity={0.3} activeDot={false} />
  <Line isAnimationActive={!isExporting} type="monotone" dataKey="consumoEsperado" name="Curva Alvo" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+ {showPreviousCurve && <Line isAnimationActive={!isExporting} type="monotone" dataKey="esperadoAnterior" name="Curva Anterior" stroke="#f97316" strokeWidth={2} strokeOpacity={0.5} strokeDasharray="4 4" dot={false} />}
  {filteredIntegrados.map((integrado, index) => {
  const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'];
  
@@ -897,7 +937,8 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
  </thead>
  <tbody className="divide-y divide-slate-100">
  {filteredVisits.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((v) => {
- const singleIntegrado = filteredIntegrados[0];
+ const singleIntegrado = filteredIntegrados.find(i => isVisitForIntegrado(v, i));
+ const currentConfig = configs.find(c => c.empresa_id === singleIntegrado?.empresaId);
  const age = calculateVisitAge(v, singleIntegrado);
  const realConsumo = calculateRealConsumption(v);
  const expected = getExpectedConsumption(age, v.tipoLote, v.pesoAloj, singleIntegrado?.alojamentoDate, singleIntegrado?.status, singleIntegrado?.fechamentoDate, currentConfig, undefined, v.date);

@@ -240,7 +240,7 @@ export const storage = {
           const tipoLote = (getCol(row, 'Tipo Lote') as any) || 'Misto';
           
           const integrado = integradosMap.get(integradoId);
-          const { metas } = getActiveCurve(integrado?.alojamentoDate, integrado?.status, tipoLote, integrado?.fechamentoDate);
+          const { metas } = getActiveCurve(integrado?.alojamentoDate, integrado?.status, tipoLote, integrado?.fechamentoDate, undefined, undefined, dataVisita);
           
           const animaisAlojados = parseFloatSafe(getCol(row, 'Animais Alojados'));
           const animaisMortos = parseFloatSafe(getCol(row, 'Animais Mortos'));

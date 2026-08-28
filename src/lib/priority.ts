@@ -1,5 +1,6 @@
 import { Integrado, Visit, isVisitForIntegrado } from '../types';
 import { getActiveCurve, getExpectedConsumption } from '../data';
+import { getEmpresaConfigsLocal } from './storage';
 
 export interface PriorityScore {
   score: number;
@@ -128,7 +129,8 @@ export function calculatePriority(integrado: Integrado, allVisits: Visit[]): Pri
       }
     }
     
-    const expected = getExpectedConsumption(feedAge, visitWithFeed.tipoLote, visitWithFeed.pesoAloj, integrado.alojamentoDate, integrado.status, integrado.fechamentoDate, undefined, undefined, visitWithFeed.date);
+    const currentConfig = getEmpresaConfigsLocal().find(c => c.empresa_id === integrado.empresaId);
+    const expected = getExpectedConsumption(feedAge, visitWithFeed.tipoLote, visitWithFeed.pesoAloj, integrado.alojamentoDate, integrado.status, integrado.fechamentoDate, currentConfig, undefined, visitWithFeed.date);
     if (expected !== undefined && expected !== null && expected > 0) {
        feedDeviation = Number(visitWithFeed.consumoAcumuladoReal) - expected;
     }

@@ -46,16 +46,17 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
   const chartData = [];
   for (let d = 1; d <= maxIdade; d++) {
      const visit = loteVisits.find(v => v.idade === d);
-     const esperado = getExpectedConsumption(d, loteVisits[0]?.tipoLote, loteVisits[0]?.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, undefined, undefined, loteVisits[0]?.date);
+     const currentConfig = configs.find(c => c.empresa_id === lote?.empresaId);
+     const esperado = getExpectedConsumption(d, loteVisits[0]?.tipoLote, loteVisits[0]?.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, currentConfig, undefined, loteVisits[0]?.date);
      
      chartData.push({
         idade: d,
-        esperado: esperado ? Number(esperado.toFixed(2)) : null,
+        esperado: (esperado && esperado > 0) ? Number(esperado.toFixed(2)) : null,
         real: (visit && visit.consumoAcumuladoReal) ? Number(visit.consumoAcumuladoReal) : null
      });
   }
 
-  const activeCurveInfo = getActiveCurve(lote?.alojamentoDate, lote?.status, loteVisits[0]?.tipoLote, lote?.fechamentoDate, undefined, loteVisits[0]?.curva_consumo_id, loteVisits[0]?.date) || {};
+  const activeCurveInfo = getActiveCurve(lote?.alojamentoDate, lote?.status, loteVisits[0]?.tipoLote, lote?.fechamentoDate, currentConfig, loteVisits[0]?.curva_consumo_id, loteVisits[0]?.date) || {};
   const metas = activeCurveInfo?.metas;
   const phaseMilestones = [];
   if (metas) {
@@ -227,7 +228,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                   : (totalRacao > 0 && vivos > 0 ? Number((totalRacao / vivos).toFixed(2)) : undefined);
 
                 const consumoEsperado = (idade > 0 && latestVisit)
-                  ? getExpectedConsumption(idade, latestVisit.tipoLote, latestVisit.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, undefined, undefined, latestVisit.date)
+                  ? getExpectedConsumption(idade, latestVisit.tipoLote, latestVisit.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, currentConfig, undefined, latestVisit.date)
                   : null;
 
                 const diffConsumo = (consumoRealCab !== undefined && consumoEsperado !== null)
@@ -446,7 +447,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                         {(() => {
                           const consumoReal = visit.consumoAcumuladoReal;
                           const integrado = integrados.find(i => i.id === visit.integradoId);
-                          const consumoEsperado = getExpectedConsumption(visit.idade, visit.tipoLote, visit.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, undefined, undefined, visit.date);
+                          const consumoEsperado = getExpectedConsumption(visit.idade, visit.tipoLote, visit.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig, undefined, visit.date);
                           const diffAcumulado = (consumoReal && consumoEsperado) ? Number((consumoReal - consumoEsperado).toFixed(2)) : null;
                           return (
                             <>
@@ -529,7 +530,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                                   if (!qtTotal || qtTotal <= 0) {
                                       let pesoEstimadoKg = t.pesoEstimadoKg || visit.pesoAmostradoKg || 0;
                                       if (pesoEstimadoKg <= 0) {
-                                          const { curve } = getActiveCurve(lote?.alojamentoDate || visit.date, 'Em andamento', visit.tipoLote || 'Misto', undefined, undefined, undefined, visit.date);
+                                          const { curve } = getActiveCurve(lote?.alojamentoDate || visit.date, 'Em andamento', visit.tipoLote || 'Misto', undefined, currentConfig, undefined, visit.date);
                                           const expectedPoint = curve.find((p: any) => p.dia >= (visit.idade || 0));
                                           pesoEstimadoKg = expectedPoint ? expectedPoint.pesoInicial : 0;
                                       }

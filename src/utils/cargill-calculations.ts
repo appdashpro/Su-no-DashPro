@@ -125,7 +125,7 @@ export function calculateMortalityRate(visit: Partial<Visit>): number {
 /**
  * Avalia o desvio de consumo em relação à curva oficial da Cargill.
  */
-export function calculateVisitFeedDeviation(visit: Partial<Visit>, integrado?: Integrado) {
+export function calculateVisitFeedDeviation(visit: Partial<Visit>, integrado?: Integrado, empresaConfig?: any, curvaId?: string) {
   const realConsumo = calculateRealConsumption(visit);
   const idade = calculateVisitAge(visit, integrado);
   const tipoLote = (visit.tipoLote as any) || 'Misto';
@@ -138,8 +138,8 @@ export function calculateVisitFeedDeviation(visit: Partial<Visit>, integrado?: I
     integrado?.alojamentoDate,
     integrado?.status,
     integrado?.fechamentoDate,
-    undefined,
-    undefined,
+    empresaConfig,
+    curvaId,
     visit.date
   );
 

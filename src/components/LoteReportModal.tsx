@@ -19,6 +19,8 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
   const reportRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const [showPreviousCurve, setShowPreviousCurve] = useState(false);
+
   const lote = integrados.find(i => i.id === integradoId);
   const configs = getEmpresaConfigsLocal();
   const currentConfig = configs.find((c: any) => c.empresa_id === lote?.empresaId);
@@ -40,18 +42,37 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
     const diff = Math.round((dataFim.getTime() - dataAloj.getTime()) / (1000 * 60 * 60 * 24));
     idadeAtual = Math.max(1, diff);
   }
+
+  let previousCurveDate = '2000-01-01';
+  if (currentConfig?.curva_desempenho && Array.isArray(currentConfig.curva_desempenho) && currentConfig.curva_desempenho.length > 1) {
+    const sorted = [...currentConfig.curva_desempenho].sort((a: any, b: any) => a.dataVigencia.localeCompare(b.dataVigencia));
+    previousCurveDate = sorted[0].dataVigencia; // The very first curve
+  }
+
   const chartData: any[] = [];
   for (let d = 1; d <= maxIdade; d++) {
      const visit = loteVisits.find(v => v.idade === d);
-     const esperado = getExpectedConsumption(d, loteVisits[0]?.tipoLote, loteVisits[0]?.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, undefined, undefined, loteVisits[0]?.date);
+     const currentConfig = configs.find(c => c.empresa_id === lote?.empresaId);
+     
+     let dDateStr = loteVisits[0]?.date || '2000-01-01';
+     if (lote?.alojamentoDate) {
+       const dDate = new Date(lote.alojamentoDate + 'T12:00:00');
+       dDate.setDate(dDate.getDate() + (d - 1));
+       dDateStr = dDate.toISOString().split('T')[0];
+     }
+     
+     const esperado = getExpectedConsumption(d, loteVisits[0]?.tipoLote, loteVisits[0]?.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, currentConfig, undefined, dDateStr);
+     const esperadoAnterior = getExpectedConsumption(d, loteVisits[0]?.tipoLote, loteVisits[0]?.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, currentConfig, undefined, previousCurveDate);
+     
      chartData.push({
         idade: d,
-        esperado: esperado !== null && esperado !== undefined ? Number(esperado.toFixed(2)) : null,
+        esperado: (esperado !== null && esperado !== undefined && esperado > 0) ? Number(esperado.toFixed(2)) : null,
+        esperadoAnterior: (esperadoAnterior !== null && esperadoAnterior !== undefined && esperadoAnterior > 0) ? Number(esperadoAnterior.toFixed(2)) : null,
         real: (visit && visit.consumoAcumuladoReal !== null && visit.consumoAcumuladoReal !== undefined) ? Number(visit.consumoAcumuladoReal) : null
      });
   }
 
-  const activeCurveInfo = getActiveCurve(lote?.alojamentoDate, lote?.status, loteVisits[0]?.tipoLote, lote?.fechamentoDate, undefined, loteVisits[0]?.curva_consumo_id, loteVisits[0]?.date) || {};
+  const activeCurveInfo = getActiveCurve(lote?.alojamentoDate, lote?.status, loteVisits[0]?.tipoLote, lote?.fechamentoDate, currentConfig, loteVisits[0]?.curva_consumo_id, loteVisits[0]?.date) || {};
   const metas = activeCurveInfo?.metas;
   const phaseMilestones: any[] = [];
   if (metas) {
@@ -133,7 +154,7 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
   const targetAge = referenceVisit?.idade || maxIdade;
   
   const consumoEsperado = (referenceVisit && targetAge > 0)
-    ? getExpectedConsumption(targetAge, referenceVisit.tipoLote, referenceVisit.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, undefined, undefined, referenceVisit.date)
+    ? getExpectedConsumption(targetAge, referenceVisit.tipoLote, referenceVisit.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, currentConfig, undefined, referenceVisit.date)
     : null;
 
   // Pagination Engine
@@ -338,7 +359,15 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
       <div className="grid grid-cols-2 gap-6 mb-8">
         {/* Consumo Chart */}
         <div>
-          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3 border-b border-slate-200 pb-1">Curva de Consumo</h3>
+          <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-1">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Curva de Consumo</h3>
+            <button 
+              onClick={() => setShowPreviousCurve(!showPreviousCurve)}
+              className={`text-xs font-semibold px-2 py-0.5 rounded transition-colors ${showPreviousCurve ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              {showPreviousCurve ? 'Ocultar Curva Anterior' : 'Mostrar Curva Anterior'}
+            </button>
+          </div>
           <div className="h-[220px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 20, right: 0, left: -25, bottom: 0 }}>
@@ -358,6 +387,9 @@ export function LoteReportModal({ integradoId, visits, integrados, onClose }: Lo
                 <YAxis tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
                 <Area type="monotone" dataKey="real" stroke="none" fill="url(#colorRealRep)" fillOpacity={1} connectNulls={true} isAnimationActive={false} />
                 <Line type="monotone" dataKey="esperado" stroke="#94a3b8" strokeWidth={1.5} dot={false} strokeDasharray="4 4" isAnimationActive={false} />
+                {showPreviousCurve && (
+                  <Line type="monotone" dataKey="esperadoAnterior" stroke="#f97316" strokeWidth={2} strokeOpacity={0.5} dot={false} strokeDasharray="4 4" isAnimationActive={false} />
+                )}
                 <Line type="monotone" dataKey="real" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={true} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>

@@ -25,9 +25,11 @@ interface Props {
   pesoEstimadoBase?: number;
   medicamentosPermitidos?: string[];
   causasMortalidade?: string[];
+  empresaConfig?: any;
+  curva_consumo_id?: string;
 }
 
-export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVivos, tipoLote, alojamentoDate, pesoAmostradoKg, onPesoChange, pesoEstimadoBase, medicamentosPermitidos, causasMortalidade }: Props) {
+export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVivos, tipoLote, alojamentoDate, pesoAmostradoKg, onPesoChange, pesoEstimadoBase, medicamentosPermitidos, causasMortalidade, empresaConfig, curva_consumo_id }: Props) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const [memory, setMemory] = useState<MedicationMemory[]>([]);
@@ -91,7 +93,7 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
   // Use provided base estimated weight or fallback to curve
   let pesoEstimadoCurve = pesoEstimadoBase || 0;
   if (!pesoEstimadoCurve) {
-    const { curve } = getActiveCurve(alojamentoDate, 'Em andamento', tipoLote, undefined, undefined, undefined, new Date().toISOString().split('T')[0]);
+    const { curve } = getActiveCurve(alojamentoDate, 'Em andamento', tipoLote, undefined, empresaConfig, curva_consumo_id, new Date().toISOString().split('T')[0]);
     const expectedWeightPoint = curve.find((p: GrowthCurvePoint) => p.dia >= (idade || 0));
     pesoEstimadoCurve = expectedWeightPoint ? expectedWeightPoint.pesoInicial : 0;
   }

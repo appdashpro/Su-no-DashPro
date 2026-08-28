@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Empresa, EmpresaConfig, CurveConfig, UserProfile } from '../types';
 import { AlertCircle, Check, Save, Edit2, X } from 'lucide-react';
 import { getEmpresaConfigsLocal } from '../lib/storage';
-import { growthCurvesMisto, defaultPastreProgramaAlimentar, defaultBugioProgramaAlimentar } from '../data';
+import { growthCurvesMisto, defaultPastreProgramaAlimentar, defaultBugioProgramaAlimentar, defaultBtzProgramaAlimentar } from '../data';
 
 interface ReferenceCurveProps {
   currentUser?: UserProfile | null;
@@ -220,8 +220,10 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
            activeData.programa_alimentar = defaultPastreProgramaAlimentar;
         } else if (empId === '00000000-0000-0000-0000-000000000002') {
            activeData.programa_alimentar = defaultBugioProgramaAlimentar;
-        } else if (!activeData.programa_alimentar || activeData.programa_alimentar.length === 0) {
-           activeData.programa_alimentar = defaultPastreProgramaAlimentar;
+        } else if (empresas.find(e => e.id === empId)?.nome.toLowerCase().includes('btz')) {
+           if (!activeData.programa_alimentar || activeData.programa_alimentar.length === 0) {
+             activeData.programa_alimentar = defaultBtzProgramaAlimentar;
+           }
         }
 
         // --- V2 HOTFIX FOR PASTRE ---
@@ -261,6 +263,33 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
                if (officialBugio) {
                    activeData.curva_desempenho[bugioIndex].curve = officialBugio.curve;
                    activeData.curva_desempenho[bugioIndex].metas = officialBugio.metas;
+               }
+            }
+        }
+        // --- BTZ HOTFIX ---
+        if (empresas.find(e => e.id === empId)?.nome.toLowerCase().includes('btz')) {
+            if (!activeData.curva_desempenho || activeData.curva_desempenho.length === 0 || !activeData.curva_desempenho.find((c: any) => c.version === 'btz' || (c.nome && c.nome.toLowerCase().includes('btz')))) {
+               const officialBtz = growthCurvesMisto.find(c => c.version === 'btz');
+               if (officialBtz) {
+                   activeData.curva_desempenho = activeData.curva_desempenho || [];
+                   activeData.curva_desempenho.push({
+                       id: 'btz-curve',
+                       nome: 'Curva Grupo BTZ',
+                       dataVigencia: officialBtz.effectiveDate,
+                       tipoLote: 'Misto',
+                       version: 'btz',
+                       tipoCalculo: 'DIA_UM',
+                       metaMortalidade: activeData.meta_mortalidade || 0,
+                       curve: officialBtz.curve,
+                       metas: officialBtz.metas
+                   });
+               }
+            } else {
+               const btzIndex = activeData.curva_desempenho.findIndex((c: any) => c.version === 'btz' || (c.nome && c.nome.toLowerCase().includes('btz')));
+               const officialBtz = growthCurvesMisto.find(c => c.version === 'btz');
+               if (officialBtz) {
+                   activeData.curva_desempenho[btzIndex].curve = officialBtz.curve;
+                   activeData.curva_desempenho[btzIndex].metas = officialBtz.metas;
                }
             }
         }
@@ -598,16 +627,6 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
                     <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseDuration('Terminação 1')}</td>
                     <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseDuration('Terminação 2')}</td>
                     <td className="px-3 py-2 text-xs font-bold bg-[#1A3A5B] text-white">{getTotalDuration()}</td>
-                  </tr>
-                  <tr>
-                    <td className="px-3 py-2 text-slate-700 font-semibold text-xs text-left border-r border-slate-100 bg-slate-50">Idade (dias)</td>
-                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Alojamento')}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Crescimento 1')}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Crescimento 2')}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Crescimento 3')}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Terminação 1')}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500 bg-slate-50">{getPhaseAge('Terminação 2')}</td>
-                    <td className="px-3 py-2 text-xs font-bold bg-[#1A3A5B] text-white">{getTotalAge()}</td>
                   </tr>
                 </tbody>
               </table>

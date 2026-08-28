@@ -1,3 +1,5 @@
+import { defaultBtzProgramaAlimentar, defaultMetasBtz, growthCurveBtz } from './btzData';
+export { defaultBtzProgramaAlimentar, defaultMetasBtz, growthCurveBtz };
 import { defaultBugioProgramaAlimentar, defaultMetasBugio, growthCurveBugio } from './bugioData';
 export { defaultBugioProgramaAlimentar, defaultMetasBugio, growthCurveBugio };
 import { GrowthCurvePoint, Integrado, Visit } from './types';
@@ -931,6 +933,13 @@ const defaultMetasV2 = {
 
 export const growthCurvesMisto: CurveVersion[] = [
   {
+    version: 'btz',
+    nome: 'Curva Grupo BTZ',
+    effectiveDate: '2026-08-20',
+    curve: growthCurveBtz,
+    metas: defaultMetasBtz,
+  },
+  {
     version: 'bugio',
     nome: 'Curva Bugio',
     effectiveDate: '2026-08-01',
@@ -978,24 +987,11 @@ export const getActiveCurve = (alojamentoDate?: string, status?: string, tipoLot
           selected = cv;
         }
       }
-      return selected || { id: 'default', curve: growthCurvesMisto[growthCurvesMisto.length - 1].curve, metas: defaultMetas };
+      return selected || { id: 'none', curve: [], metas: {} as any };
     }
   }
 
-  if (tipoLote === 'Fêmea') return { id: 'legacy_femea', curve: growthCurveFemea, metas: defaultMetasFemea };
-  
-  if (status === 'Em andamento') {
-    return growthCurvesMisto[growthCurvesMisto.length - 1];
-  }
-  
-  const referenceDate = fechamentoDate || alojamentoDate || '2000-01-01';
-  let selected = growthCurvesMisto[0];
-  for (const cv of growthCurvesMisto) {
-    if (referenceDate >= cv.effectiveDate) {
-      selected = cv;
-    }
-  }
-  return selected;
+  return { id: 'none', curve: [], metas: {} as any };
 };
 
 // Expose legacy exports to not break everything immediately, 
@@ -1099,7 +1095,11 @@ export const defaultMetasFemea = {
 export const getExpectedPerformance = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string, empresaConfig?: any, curvaId?: string, visitDate?: string) => {
   const activeCurveInfo = getActiveCurve(alojamentoDate, status, tipoLote, fechamentoDate, empresaConfig, curvaId, visitDate);
   
-  let currentWeight = (pesoAloj && Number(pesoAloj) > 0) ? Number(pesoAloj) : activeCurveInfo.curve[0].pesoInicial;
+  if (!activeCurveInfo || !activeCurveInfo.curve || activeCurveInfo.curve.length === 0) {
+    return { expectedConsumption: 0, expectedWeight: 0 };
+  }
+
+  let currentWeight = (pesoAloj && Number(pesoAloj) > 0) ? Number(pesoAloj) : (activeCurveInfo.curve[0]?.pesoInicial || 0);
   let totalConsumo = 0;
   
   // Calculate offset if tipo_calculo_curva is PESO_ALOJAMENTO

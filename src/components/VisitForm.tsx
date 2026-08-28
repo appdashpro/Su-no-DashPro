@@ -20,10 +20,12 @@ interface VisitaFormProps {
 }
 
 export function VisitaForm({ integrados, empresas = [], visits = [], initialData, isNewLote, onSave, onCancel }: VisitaFormProps) {
+ const configs = getEmpresaConfigsLocal();
  const [formData, setFormData] = useState<Partial<Visit> & { alojamentoDate?: string, integradoNome?: string, empresaId?: string }>(() => {
  if (initialData) {
  const integrado = integrados.find(i => i.id === initialData.integradoId);
- const { metas } = getActiveCurve(integrado?.alojamentoDate, integrado?.status, initialData.tipoLote || 'Misto', integrado?.fechamentoDate, undefined, undefined, initialData.date);
+ const currentConfig = configs.find(c => c.empresa_id === (initialData.empresaId || integrado?.empresaId));
+ const { metas } = getActiveCurve(integrado?.alojamentoDate, integrado?.status, initialData.tipoLote || 'Misto', integrado?.fechamentoDate, currentConfig, initialData.curva_consumo_id, initialData.date);
  const initialPesoAmostrado = (initialData.pesoAmostradoKg !== undefined && Number(initialData.pesoAmostradoKg) > 0)
    ? Number(initialData.pesoAmostradoKg)
    : (initialData.tratamentos?.find(t => t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)?.pesoEstimadoKg);
@@ -159,7 +161,9 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  if (name === 'tipoLote' || name === 'alojamentoDate') {
  const activeTipo = name === 'tipoLote' ? value : formData.tipoLote;
  const activeAlojDate = name === 'alojamentoDate' ? value : formData.alojamentoDate;
- const { metas } = getActiveCurve(activeAlojDate, undefined, activeTipo, undefined, undefined, undefined, formData.date);
+ const matchInt = integrados.find(i => i.id === (initialData?.integradoId || formData.integradoId) || (i.name === formData.integradoNome && i.alojamentoDate === formData.alojamentoDate));
+ const currentConfig = configs.find(c => c.empresa_id === (formData.empresaId || matchInt?.empresaId));
+ const { metas } = getActiveCurve(activeAlojDate, undefined, activeTipo, undefined, currentConfig, formData.curva_consumo_id, formData.date);
  updates = {
  ...updates,
  ...metas
@@ -217,6 +221,22 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  }
  }
 
+
+
+  if (['tipoLote', 'alojamentoDate', 'integradoNome', 'empresaId', 'curva_consumo_id'].includes(name)) {
+    const tempState = { ...formData, ...updates };
+    const matchingIntegradosAll = integrados.filter(i => (i.name || '').toLowerCase() === String(tempState.integradoNome || '').toLowerCase());
+    const emAndamento = matchingIntegradosAll.filter(i => i.status === 'Em andamento');
+    let integrado = emAndamento.length > 0 ? (tempState.alojamentoDate ? emAndamento.find(i => i.alojamentoDate === tempState.alojamentoDate) || emAndamento[0] : emAndamento[0]) : null;
+    if (!integrado) integrado = integrados.find(i => i.id === (initialData?.integradoId || formData.integradoId));
+    
+    const activeAlojDate = tempState.alojamentoDate || integrado?.alojamentoDate;
+    const activeTipo = tempState.tipoLote || 'Misto';
+    const currentConfig = configs.find(c => c.empresa_id === (tempState.empresaId || integrado?.empresaId));
+    
+    const { metas } = getActiveCurve(activeAlojDate, integrado?.status, activeTipo, integrado?.fechamentoDate, currentConfig, tempState.curva_consumo_id, tempState.date);
+    updates = { ...updates, ...metas };
+  }
 
  
  setFormData(prev => {
@@ -283,7 +303,6 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  );
  const currentIntegradoId = matchingIntegrado?.id || initialData?.integradoId || `i_${(formData.integradoNome || '').replace(/\s+/g, '').toLowerCase()}_${(formData.alojamentoDate || '').replace(/[-/]/g, '')}`;
  const integrado = matchingIntegrado || integrados.find(i => i.id === currentIntegradoId);
- const configs = getEmpresaConfigsLocal();
   const currentConfig = configs.find((c: any) => c.empresa_id === (formData.empresaId || integrado?.empresaId));
   const currentIdade = Number(formData.idade) || 0;
  const activeCurve = getActiveCurve(integrado?.alojamentoDate, integrado?.status, formData.tipoLote as any, integrado?.fechamentoDate, currentConfig, initialData?.curva_consumo_id, formData.date);
@@ -305,11 +324,11 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  for (let d = 1; d <= maxDays; d++) {
  data.push({
  dia: d,
- consumoAcumulado: getExpectedConsumption(d, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, undefined, undefined, formData.date)
+ consumoAcumulado: getExpectedConsumption(d, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig, resolvedCurvaId, formData.date)
  });
  }
  return data;
- }, [currentIdade, formData.tipoLote, formData.pesoAloj]);
+ }, [currentIdade, formData.tipoLote, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig, resolvedCurvaId, formData.date]);
 
  const currentConsumoReal = Number(formData.consumoAcumuladoReal) || null;
  const currentDiffKg = (currentConsumoReal !== null && expectedConsumption !== null) ? (currentConsumoReal - expectedConsumption) : null;
@@ -322,7 +341,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  let prevVisitInfo = null;
  if (!initialData && prevVisit) {
  const prevIdade = prevVisit.idade || 0;
- const prevExpected = getExpectedConsumption(prevIdade, prevVisit.tipoLote || formData.tipoLote as any, prevVisit.pesoAloj || formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, undefined, undefined, prevVisit.date);
+ const prevExpected = getExpectedConsumption(prevIdade, prevVisit.tipoLote || formData.tipoLote as any, prevVisit.pesoAloj || formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig, resolvedCurvaId, prevVisit.date);
  const prevReal = prevVisit.consumoAcumuladoReal;
  
  let diffInfo = '';
@@ -756,7 +775,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  </div>
  </div>
 
- {currentIdade > 0 && (
+ {currentIdade > 0 && dynamicChartData.some(d => d.consumoAcumulado > 0) && (
  <div className="mt-6 pt-6 border-t border-slate-100 min-w-0">
  <h3 className="text-sm font-bold text-slate-500 mb-4">Acompanhamento de Consumo (Interativo)</h3>
  <div className="h-64 bg-slate-50 border border-slate-200 rounded-lg p-2 md:p-4 min-w-0">

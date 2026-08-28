@@ -4,6 +4,7 @@ import { getExpectedConsumption, getActiveCurve } from '../data';
 import { Search, ArrowUpDown, Download, Plus, Eye, X, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { getSavedUserProfile } from '../lib/auth';
+import { getEmpresaConfigsLocal } from '../lib/storage';
 
 interface VisitsListProps {
  pendingSyncIds?: string[];
@@ -22,6 +23,7 @@ interface VisitsListProps {
 type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'idade-desc' | 'idade-asc';
 
 export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onNewVisit, onNewLote, onExport, viewingIntegradoId, onSetViewingIntegradoId, pendingSyncIds, empresas = [] }: VisitsListProps) {
+  const configs = getEmpresaConfigsLocal();
  const [searchTerm, setSearchTerm] = useState('');
  const [sortBy, setSortBy] = useState<SortOption>('date-desc');
  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -169,9 +171,10 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  </tr>
  ) : filteredVisits.map((v) => {
  const integrado = getIntegradoForVisit(v);
- const expected = getExpectedConsumption(v.idade, v.tipoLote, v.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, undefined, undefined, v.date);
- const activeCurveInfo = getActiveCurve(integrado?.alojamentoDate, integrado?.status, v.tipoLote, integrado?.fechamentoDate, undefined, undefined, v.date);
- const metas = activeCurveInfo.metas;
+ const currentConfig = configs.find(c => c.empresa_id === integrado?.empresaId);
+ const expected = getExpectedConsumption(v.idade, v.tipoLote, v.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig, undefined, v.date);
+ const activeCurveInfo = getActiveCurve(integrado?.alojamentoDate, integrado?.status, v.tipoLote, integrado?.fechamentoDate, currentConfig, undefined, v.date);
+ const metas = activeCurveInfo?.metas || {};
 
  const alojados = Number(v.animaisAlojados) || 0;
  const mortos = Number(v.animaisMortos) || 0;

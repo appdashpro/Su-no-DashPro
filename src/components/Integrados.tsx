@@ -16,7 +16,10 @@ interface IntegradosProps {
   onDelete: (id: string) => void;
 }
 
+import { getEmpresaConfigsLocal } from '../lib/storage';
+
 export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete }: IntegradosProps) {
+  const configs = getEmpresaConfigsLocal();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editLoteNumber, setEditLoteNumber] = useState('');
@@ -168,7 +171,8 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
 
                 if (i.lastVisit) {
                   if (i.lastVisit.consumoAcumuladoReal !== undefined && i.lastVisit.consumoAcumuladoReal !== null && Number(i.lastVisit.consumoAcumuladoReal) > 0) {
-                    const expected = getExpectedConsumption(Number(i.lastVisit.idade), i.lastVisit.tipoLote, i.lastVisit.pesoAloj, i.alojamentoDate, i.status, i.fechamentoDate, undefined, undefined, i.lastVisit.date);
+                    const currentConfig = configs.find(c => c.empresa_id === i.empresaId);
+                    const expected = getExpectedConsumption(Number(i.lastVisit.idade), i.lastVisit.tipoLote, i.lastVisit.pesoAloj, i.alojamentoDate, i.status, i.fechamentoDate, currentConfig, undefined, i.lastVisit.date);
                     const realVal = Number(i.lastVisit.consumoAcumuladoReal);
                     const diff = realVal - (expected || 0);
                     consumoStr = `${realVal.toFixed(2)} kg`;
