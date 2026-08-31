@@ -1015,7 +1015,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
         </div>
 
         {/* Bar Chart - Desvio */}
-        <div className="xl:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col min-h-[450px]">
+        <div className="xl:col-span-12 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col min-h-[450px]">
           <div className="mb-6">
             <h2 className="text-base font-bold text-slate-800">Desvio de Consumo por Lote</h2>
             <p className="text-xs text-slate-500 mt-1">Comparativo de fuga (+/- kg) da última visita</p>
@@ -1050,7 +1050,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
         </div>
 
         {/* Table - Last Visits Summary */}
-        <div className="xl:col-span-7 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col min-h-[450px]">
+        <div className="xl:col-span-12 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col min-h-[450px]">
           <div className="mb-6">
             <h2 className="text-base font-bold text-slate-800">Ranking Analítico dos Lotes</h2>
             <p className="text-xs text-slate-500 mt-1">Visão detalhada de performance na última visita</p>
