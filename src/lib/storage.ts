@@ -289,7 +289,7 @@ export const storage = {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session || session.user.id === 'offline') {
           if (typeof window !== 'undefined') window.dispatchEvent(new Event('session-expired'));
-          throw new Error("Sessão expirada ou inválida. Por favor, faça login novamente.");
+          return false;
       }
 
       
