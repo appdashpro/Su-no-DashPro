@@ -1,4 +1,5 @@
 import { safeStorage } from "./safeStorage";
+import { getCachedAuthSession } from "./auth";
 import { Integrado, Visit, Tratamento } from '../types';
 import { supabase } from './supabase';
 import { getActiveCurve, initialIntegrados, initialVisits } from '../data';
@@ -9,7 +10,64 @@ export const OFFLINE_QUEUE_KEY = 'suino_dashpro_offline_queue';
 export const OFFLINE_DELETE_VISIT_QUEUE = 'suino_dashpro_offline_delete_visit';
 export const OFFLINE_DELETE_INTEGRADO_QUEUE = 'suino_dashpro_offline_delete_integrado';
 export const OFFLINE_EDIT_INTEGRADO_QUEUE = "suino_dashpro_offline_edit_integrado";
+
+const parseQueueSafe = (key: string) => {
+  try {
+    const data = safeStorage.getItem(key);
+    if (!data || data === 'undefined' || data === 'null') return [];
+    return JSON.parse(data) || [];
+  } catch (e) {
+    console.error(`Invalid JSON in queue ${key}, clearing it.`);
+    safeStorage.removeItem(key);
+    return [];
+  }
+};
+
 import { defaultMugnolConfig } from '../mugnolConfig';
+import { generateUUID } from '../utils/uuid';
+
+
+export const getSyncLogs = () => {
+  try {
+    const data = safeStorage.getItem('SYNC_DIAGNOSTIC_LOGS');
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+};
+export const addSyncLog = (message: string, error?: any) => {
+  try {
+    const logs = getSyncLogs();
+    
+    let errorStr = undefined;
+    if (error) {
+      if (error instanceof Error) {
+        errorStr = `${error.name}: ${error.message}\n${error.stack}`;
+      } else if (typeof error === 'object') {
+        try {
+            errorStr = JSON.stringify(error);
+            if (errorStr === '{}') {
+                errorStr = error.message || error.toString();
+            }
+        } catch(e) {
+            errorStr = String(error);
+        }
+      } else {
+        errorStr = String(error);
+      }
+    }
+    
+    logs.unshift({
+      time: new Date().toISOString(),
+      message,
+      error: errorStr
+    });
+    safeStorage.setItem('SYNC_DIAGNOSTIC_LOGS', JSON.stringify(logs.slice(0, 50)));
+  } catch (e) {}
+};
+export const clearSyncLogs = () => {
+  safeStorage.removeItem('SYNC_DIAGNOSTIC_LOGS');
+};
 
 export const CONFIGS_KEY = "suino_dashpro_empresa_configs";
 export const getEmpresaConfigsLocal = () => { 
@@ -70,7 +128,7 @@ const getVisitsLocal = (): Visit[] => {
 
 function addVisitsToOfflineQueue(toProcess: any[]) {
   try {
-    const queue = JSON.parse(safeStorage.getItem(OFFLINE_QUEUE_KEY) || '[]');
+    const queue = parseQueueSafe(OFFLINE_QUEUE_KEY);
     for (const v of toProcess) {
       const existingIdx = queue.findIndex((q: any) => q.id === v.id);
       if (existingIdx >= 0) queue[existingIdx] = v;
@@ -105,7 +163,7 @@ export const storage = {
 
         integrados = integrados.map(i => {
             if (i.id && (i.id.startsWith('i_') || i.id.startsWith('dummy_'))) {
-                const newId = crypto.randomUUID();
+                const newId = generateUUID();
                 loteMap[i.id] = newId;
                 changed = true;
                 return { ...i, id: newId };
@@ -118,7 +176,7 @@ export const storage = {
             let updated = false;
             let newV = { ...v };
             if (v.id && (v.id.startsWith('v_') || v.id.startsWith('dummy_'))) {
-                const newId = crypto.randomUUID();
+                const newId = generateUUID();
                 visitMap[v.id] = newId;
                 newV.id = newId;
                 updated = true;
@@ -129,7 +187,7 @@ export const storage = {
                 updated = true;
                 changed = true;
             } else if (v.integradoId && (v.integradoId.startsWith('i_') || v.integradoId.startsWith('dummy_'))) {
-                const newId = crypto.randomUUID();
+                const newId = generateUUID();
                 loteMap[v.integradoId] = newId;
                 newV.integradoId = newId;
                 updated = true;
@@ -186,9 +244,8 @@ export const storage = {
         });
 
         // Also update pending sync queue
-        let queueStr = safeStorage.getItem(OFFLINE_QUEUE_KEY);
-        if (queueStr) {
-            let queue = JSON.parse(queueStr);
+        let queue = parseQueueSafe(OFFLINE_QUEUE_KEY);
+        if (queue && queue.length > 0) {
             let queueChanged = false;
             queue = queue.map((v: any) => {
                 let newV = { ...v };
@@ -223,12 +280,20 @@ export const storage = {
     try {
       if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
       if (typeof window !== 'undefined' && safeStorage.getItem('EDITING_LOCK') === 'true') return false;
+      
+      const cachedSession = getCachedAuthSession();
+      if (cachedSession?.user?.id?.includes('offline')) {
+          return false; // Skip sync silently for offline sessions
+      }
 
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session || session.user.id === 'offline') return false;
+      if (!session || session.user.id === 'offline') {
+          if (typeof window !== 'undefined') window.dispatchEvent(new Event('session-expired'));
+          throw new Error("Sessão expirada ou inválida. Por favor, faça login novamente.");
+      }
 
       
-      let editIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_EDIT_INTEGRADO_QUEUE) || '[]');
+      let editIntQueue = parseQueueSafe(OFFLINE_EDIT_INTEGRADO_QUEUE);
       if (editIntQueue.length > 0) {
         let remainingQueue = [];
         for (const edit of editIntQueue) {
@@ -257,7 +322,7 @@ export const storage = {
           safeStorage.removeItem(OFFLINE_EDIT_INTEGRADO_QUEUE);
         }
       }
-const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEUE) || '[]');
+const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
       if (delIntQueue.length > 0) {
         let remainingDelIntQueue = [];
         for (const id of delIntQueue) {
@@ -288,7 +353,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
         }
       }
 
-      const delVisitQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_VISIT_QUEUE) || '[]');
+      const delVisitQueue = parseQueueSafe(OFFLINE_DELETE_VISIT_QUEUE);
       if (delVisitQueue.length > 0) {
         let remainingDelVisitQueue = [];
         for (const id of delVisitQueue) {
@@ -313,10 +378,8 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
         }
       }
 
-      const queueStr = safeStorage.getItem(OFFLINE_QUEUE_KEY);
-      if (queueStr) {
-        const queue = JSON.parse(queueStr);
-        if (queue && queue.length > 0) {
+      const queue = parseQueueSafe(OFFLINE_QUEUE_KEY);
+      if (queue && queue.length > 0) {
           // Process queue WITHOUT removing it first!
           // We clear it only if it succeeds completely, otherwise we leave it.
           // Actually, saveVisits modifies the queue itself if it encounters errors, but wait, 
@@ -328,8 +391,8 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
               await storage.saveVisits(getVisitsLocal(), queue);
           } catch (err) {
               // Restore the original queue, BUT merge with any new items added by the UI during the sync
-              const currentQueueStr = safeStorage.getItem(OFFLINE_QUEUE_KEY);
-              const currentQueue = currentQueueStr ? JSON.parse(currentQueueStr) : [];
+              
+              const currentQueue = parseQueueSafe(OFFLINE_QUEUE_KEY);
               
               // Add back items that were in the queue we tried to process
               for (const v of queue) {
@@ -340,15 +403,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
               safeStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(currentQueue));
               throw err;
           }
-          
-          const newQueueStr = safeStorage.getItem(OFFLINE_QUEUE_KEY);
-          if (!newQueueStr || JSON.parse(newQueueStr).length === 0) {
-             window.dispatchEvent(new Event('sync-completed'));
-             return true;
-          }
-        }
       }
-
       const { data: integradosDB } = await supabase.from('integrados').select('*').range(0, 9999);
       const { data: lotesDB } = await supabase.from('lotes').select('*').range(0, 9999);
       const { data: empresasDB } = await supabase.from("empresas").select("*").range(0, 9999);
@@ -573,10 +628,15 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
       }
       safeStorage.setItem('LAST_SYNC_TIME', new Date().toISOString());
       
+      const remainingQueueStr = safeStorage.getItem(OFFLINE_QUEUE_KEY);
+      if (parseQueueSafe(OFFLINE_QUEUE_KEY).length > 0) {
+          console.warn("Alguns lançamentos pendentes falharam ao sincronizar. Eles continuarão salvos offline para tentativa futura.");
+      }
+      
       window.dispatchEvent(new Event('sync-completed'));
       return true;
     } catch (e) {
-      console.error('Error syncing:', e);
+      console.error("Error syncing:", e); addSyncLog("Error syncing", e);
       throw e;
     }
   },
@@ -587,7 +647,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
 
   getPendingSyncIds: (): string[] => {
     try {
-        const queue = JSON.parse(safeStorage.getItem(OFFLINE_QUEUE_KEY) || '[]');
+        const queue = parseQueueSafe(OFFLINE_QUEUE_KEY);
         return queue.map((v: any) => v.id);
     } catch {
         return [];
@@ -623,7 +683,49 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
     
     for (const v of toProcess) {
       try {
-       const loteId = v.integradoId;
+       let loteId = v.integradoId;
+       
+       // Auto-heal legacy non-UUID lotes (e.g. from i_ Date.now())
+       const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+       if (loteId && !isUUID(loteId)) {
+           const newLoteId = generateUUID();
+           const localIntegrados = getIntegradosLocal();
+           const localLoteIndex = localIntegrados.findIndex(i => i.id === loteId);
+           if (localLoteIndex !== -1) {
+               localIntegrados[localLoteIndex].id = newLoteId;
+               safeStorage.setItem(INTEGRADOS_KEY, JSON.stringify(localIntegrados));
+           }
+           const allLocalVisits = getVisitsLocal();
+           let visitsChanged = false;
+           allLocalVisits.forEach(lv => {
+               if (lv.integradoId === loteId) {
+                   lv.integradoId = newLoteId;
+                   visitsChanged = true;
+               }
+           });
+           if (visitsChanged) {
+               safeStorage.setItem(VISITS_KEY, JSON.stringify(allLocalVisits));
+           }
+           
+           const oldLoteId = loteId;
+           v.integradoId = newLoteId;
+           loteId = newLoteId;
+           
+           const queueStr = safeStorage.getItem(OFFLINE_QUEUE_KEY);
+           if (queueStr) {
+               try {
+                   const queue = JSON.parse(queueStr);
+                   let qChanged = false;
+                   queue.forEach((qv: any) => {
+                       if (qv.integradoId === oldLoteId) {
+                           qv.integradoId = newLoteId;
+                           qChanged = true;
+                       }
+                   });
+                   if (qChanged) safeStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+               } catch (e) {}
+           }
+       }
        
        // Ensure Integrado and Lote exist in Supabase before upserting Visita
        // (because the old UI allowed creating Integrados offline which just stayed in localStorage)
@@ -634,7 +736,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
 
            // We try to upsert the Integrado and Lote to prevent Foreign Key errors
            const { data: existingIntegrados } = await supabase.from('integrados').select('id, empresa_id').eq('nome', localLote.name);
-           let dbIntegradoId = existingIntegrados && existingIntegrados.length > 0 ? existingIntegrados[0].id : crypto.randomUUID();
+           let dbIntegradoId = existingIntegrados && existingIntegrados.length > 0 ? existingIntegrados[0].id : generateUUID();
            if (existingIntegrados && existingIntegrados.length > 0 && existingIntegrados[0].empresa_id) {
                targetEmpresaId = existingIntegrados[0].empresa_id;
            }
@@ -736,12 +838,13 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
           recomendacoes: v.recomendacao || null,
           avaliacao_tecnica: v.avaliacao_tecnica || null,
           tecnico_nome: v.colaborador || null,
-          curva_consumo_id: v.curva_consumo_id || null
+          curva_consumo_id: v.curva_consumo_id || null,
+          peso_amostrado_kg: v.pesoAmostradoKg || null
        };
 
        const { error: errVisita } = await supabase.from('visitas').upsert(visitaRow);
        if (errVisita) {
-          console.error("Erro upsert visita:", errVisita);
+          console.error("Erro upsert visita:", errVisita); addSyncLog("Erro upsert visita: " + v.id, errVisita);
           addVisitsToOfflineQueue([v]);
           continue;
        }
@@ -765,7 +868,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
          tipo_lote: v.tipoLote || 'Misto'
        }).eq('id', loteId);
        if (errLote) {
-           console.error("Erro update lote:", errLote);
+           console.error("Erro update lote:", errLote); addSyncLog("Erro update lote from visita: " + loteId, errLote);
            addVisitsToOfflineQueue([v]);
            continue;
        }
@@ -787,7 +890,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
 
        if (cargas.length > 0) {
          const cargasToInsert = cargas.map(c => ({
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             empresa_id: finalEmpresaId,
             visita_id: v.id,
             lote_id: loteId,
@@ -796,7 +899,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
          }));
          const { error: errCargas } = await supabase.from('cargas_racao').insert(cargasToInsert);
          if (errCargas) {
-             console.error("Erro insert cargas:", errCargas);
+             console.error("Erro insert cargas:", errCargas); addSyncLog("Erro insert cargas para visita: " + v.id, errCargas);
              addVisitsToOfflineQueue([v]);
              continue;
          }
@@ -806,7 +909,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
        
        if (v.tratamentos && v.tratamentos.length > 0) {
          const tratamentosToInsert = v.tratamentos.map(t => ({
-            id: (t.id && t.id.length === 36 && t.id.includes("-")) ? t.id : crypto.randomUUID(),
+            id: (t.id && t.id.length === 36 && t.id.includes("-")) ? t.id : generateUUID(),
             empresa_id: finalEmpresaId,
             visita_id: v.id,
             lote_id: loteId,
@@ -826,13 +929,13 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
          }));
          const { error: errTratamentos } = await supabase.from('tratamentos').insert(tratamentosToInsert);
          if (errTratamentos) {
-             console.error("Erro insert tratamentos:", errTratamentos);
+             console.error("Erro insert tratamentos:", errTratamentos); addSyncLog("Erro insert tratamentos para visita: " + v.id, errTratamentos);
              addVisitsToOfflineQueue([v]);
              continue;
          }
        }
       } catch (loopErr) {
-         console.error('Exception processing visit in saveVisits:', loopErr);
+         console.error("Exception processing visit in saveVisits:", loopErr); addSyncLog("Exception processing visit: " + v.id, loopErr);
          addVisitsToOfflineQueue([v]);
       }
     }
@@ -850,15 +953,10 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
     safeStorage.setItem(VISITS_KEY, JSON.stringify(updatedVisits));
 
     // Also clean any pending items from the offline queue
-    const queueStr = safeStorage.getItem(OFFLINE_QUEUE_KEY);
-    if (queueStr) {
-      try {
-        const queue: Visit[] = JSON.parse(queueStr);
-        const filteredQueue = queue.filter(v => v.integradoId !== id);
-        safeStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(filteredQueue));
-      } catch (e) {
-        console.error('Error cleaning offline queue for deleted lote', e);
-      }
+    const queue = parseQueueSafe(OFFLINE_QUEUE_KEY);
+    if (queue && queue.length > 0) {
+      const filteredQueue = queue.filter((v: any) => v.integradoId !== id);
+      safeStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(filteredQueue));
     }
 
     // 2. Cascade delete on Supabase
@@ -870,7 +968,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
         .eq('lote_id', id);
 
       if (errVList && isNetworkError(errVList)) {
-        const queue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEUE) || '[]');
+        const queue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
         if (!queue.includes(id)) queue.push(id);
         safeStorage.setItem(OFFLINE_DELETE_INTEGRADO_QUEUE, JSON.stringify(queue));
         return true;
@@ -892,7 +990,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
       const { error } = await supabase.from('lotes').delete().eq('id', id);
       if (error) {
         if (isNetworkError(error)) {
-          const queue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEUE) || '[]');
+          const queue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
           if (!queue.includes(id)) queue.push(id);
           safeStorage.setItem(OFFLINE_DELETE_INTEGRADO_QUEUE, JSON.stringify(queue));
         } else {
@@ -902,7 +1000,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
       return true;
     } catch (e) {
       if (isNetworkError(e)) {
-        const queue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEUE) || '[]');
+        const queue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
         if (!queue.includes(id)) queue.push(id);
         safeStorage.setItem(OFFLINE_DELETE_INTEGRADO_QUEUE, JSON.stringify(queue));
       }
@@ -916,15 +1014,10 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
     const updatedVisits = currentVisits.filter(v => v.id !== id);
     safeStorage.setItem(VISITS_KEY, JSON.stringify(updatedVisits));
 
-    const queueStr = safeStorage.getItem(OFFLINE_QUEUE_KEY);
-    if (queueStr) {
-      try {
-        const queue: Visit[] = JSON.parse(queueStr);
-        const filteredQueue = queue.filter(v => v.id !== id);
-        safeStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(filteredQueue));
-      } catch (e) {
-        console.error('Error cleaning offline queue for deleted visit', e);
-      }
+    const queue = parseQueueSafe(OFFLINE_QUEUE_KEY);
+    if (queue && queue.length > 0) {
+      const filteredQueue = queue.filter((v: any) => v.id !== id);
+      safeStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(filteredQueue));
     }
 
     // 2. Cascade delete on Supabase
@@ -934,7 +1027,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
       const { error } = await supabase.from('visitas').delete().eq('id', id);
       if (error) {
         if (isNetworkError(error)) {
-          const queue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_VISIT_QUEUE) || '[]');
+          const queue = parseQueueSafe(OFFLINE_DELETE_VISIT_QUEUE);
           if (!queue.includes(id)) queue.push(id);
           safeStorage.setItem(OFFLINE_DELETE_VISIT_QUEUE, JSON.stringify(queue));
         } else {
@@ -944,7 +1037,7 @@ const delIntQueue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_INTEGRADO_QUEU
       return true;
     } catch (e) {
       if (isNetworkError(e)) {
-        const queue = JSON.parse(safeStorage.getItem(OFFLINE_DELETE_VISIT_QUEUE) || '[]');
+        const queue = parseQueueSafe(OFFLINE_DELETE_VISIT_QUEUE);
         if (!queue.includes(id)) queue.push(id);
         safeStorage.setItem(OFFLINE_DELETE_VISIT_QUEUE, JSON.stringify(queue));
       }

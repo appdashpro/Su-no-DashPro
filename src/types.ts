@@ -24,6 +24,7 @@ export interface CurveConfig {
   last_modified_at?: string;
   curve: any[]; // GrowthCurvePoint[]
   metas: MetasCurva;
+  programa_alimentar?: any[];
 }
 
 export interface EmpresaConfig {

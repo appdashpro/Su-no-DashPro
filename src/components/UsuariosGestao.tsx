@@ -281,7 +281,7 @@ export function UsuariosGestao({ integrados, currentUser, onImpersonate }: Usuar
         map.set(i.name, i);
       }
     });
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+    return Array.from(map.values()).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [integrados]);
 
   // Filtered users

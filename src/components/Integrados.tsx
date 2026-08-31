@@ -4,7 +4,7 @@ import { getExpectedConsumption } from '../data';
 import { Users, FileDown, ClipboardList, Search, Filter, ArrowUpDown, Calendar, AlertCircle, CheckCircle2, Clock, X, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { IntegradoDetailsModal } from './IntegradoDetailsModal';
-import { LoteReportModal } from './LoteReportModal';
+import { ConsolidatedLotesModal } from './ConsolidatedLotesModal';
 import { AnimatePresence, motion } from 'motion/react';
 import { getSavedUserProfile } from '../lib/auth';
 
@@ -14,11 +14,13 @@ interface IntegradosProps {
   totalVisits: number;
   onUpdate: (integrado: Integrado) => void;
   onDelete: (id: string) => void;
+  empresas?: import('../types').Empresa[];
 }
 
 import { getEmpresaConfigsLocal } from '../lib/storage';
+import { generateLotePDF, generateConsolidadoLotesPDF } from '../reports/pdfGenerator';
 
-export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete }: IntegradosProps) {
+export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete, empresas = [] }: IntegradosProps) {
   const configs = getEmpresaConfigsLocal();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -28,11 +30,11 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
   const [editFechamentoDate, setEditFechamentoDate] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [selectedIntegradoDetails, setSelectedIntegradoDetails] = useState<string | null>(null);
-  const [reportIntegradoId, setReportIntegradoId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'Todos' | 'Em andamento' | 'Fechado'>('Todos');
   const [filterVisitStatus, setFilterVisitStatus] = useState<'Todos' | 'Em dia' | 'Atenção' | 'Atrasado'>('Todos');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'atraso-desc' | 'atraso-asc'>('date-desc');
+  const [isConsolidadoModalOpen, setIsConsolidadoModalOpen] = useState(false);
 
   const userProfile = getSavedUserProfile();
   const isTecnicoCliente = userProfile?.papel === 'TECNICO_CLIENTE';
@@ -81,8 +83,8 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
       switch (sortBy) {
         case 'date-desc': return new Date(b.alojamentoDate).getTime() - new Date(a.alojamentoDate).getTime();
         case 'date-asc': return new Date(a.alojamentoDate).getTime() - new Date(b.alojamentoDate).getTime();
-        case 'name-asc': return a.name.localeCompare(b.name);
-        case 'name-desc': return b.name.localeCompare(a.name);
+        case 'name-asc': return (a.name || "").localeCompare(b.name || "");
+        case 'name-desc': return (b.name || "").localeCompare(a.name || "");
         case 'atraso-desc': return b.diasSemVisita - a.diasSemVisita;
         case 'atraso-asc': return a.diasSemVisita - b.diasSemVisita;
         default: return 0;
@@ -90,12 +92,36 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
     });
   }, [integrados, visits, filterStatus, filterVisitStatus, searchTerm, sortBy]);
 
+  const handleGenerateLotePDF = (loteId: string) => {
+    const lote = integrados.find(i => i.id === loteId);
+    if (!lote) return;
+    const loteVisits = visits.filter(v => v.integradoId === loteId);
+    
+    const userProfile = getSavedUserProfile();
+    const currentConfig = configs.find((c: any) => c.empresa_id === lote.empresaId);
+    
+    generateLotePDF(
+      lote,
+      empresas.find(e => e.id === lote.empresaId),
+      currentConfig,
+      loteVisits
+    );
+  };
 
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
         <div className="p-3 border-b border-slate-200 bg-slate-50 flex flex-wrap gap-3 justify-between items-center">
           <div className="flex flex-wrap items-center gap-2 w-full">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsConsolidadoModalOpen(true)}
+                className="flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-100 transition-colors shadow-sm"
+              >
+                <FileDown size={14} />
+                <span className="hidden sm:inline">PDF Consolidado</span>
+              </button>
+            </div>
             <div className="relative w-full sm:w-56">
               <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
@@ -149,6 +175,7 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
           <table className="w-full text-left text-sm text-slate-600 min-w-[900px] relative">
             <thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200 sticky top-0 z-20 shadow-sm">
               <tr>
+                
                 <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50 text-slate-400 font-bold w-10 text-center">#</th>
                 <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Lote</th>
                 {!isTecnicoCliente && <th className="px-3 py-2 text-xs whitespace-nowrap bg-slate-50">Cliente</th>}
@@ -171,7 +198,7 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
 
                 if (i.lastVisit) {
                   if (i.lastVisit.consumoAcumuladoReal !== undefined && i.lastVisit.consumoAcumuladoReal !== null && Number(i.lastVisit.consumoAcumuladoReal) > 0) {
-                    const currentConfig = configs.find(c => c.empresa_id === i.empresaId);
+                    const currentConfig = configs.find((c: any) => c.empresa_id === i.empresaId);
                     const expected = getExpectedConsumption(Number(i.lastVisit.idade), i.lastVisit.tipoLote, i.lastVisit.pesoAloj, i.alojamentoDate, i.status, i.fechamentoDate, currentConfig, undefined, i.lastVisit.date);
                     const realVal = Number(i.lastVisit.consumoAcumuladoReal);
                     const diff = realVal - (expected || 0);
@@ -212,6 +239,7 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
                     key={i.id} 
                     className="hover:bg-slate-50 transition-colors"
                   >
+                    
                     <td className="px-3 py-2 whitespace-nowrap text-xs font-semibold text-slate-400 text-center">
                       {index + 1}
                     </td>
@@ -348,7 +376,7 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
                         
                         <div className="flex items-center justify-end gap-3">
                                                     <button 
-                            onClick={() => setReportIntegradoId(i.id)}
+                            onClick={() => handleGenerateLotePDF(i.id)}
                             className="text-emerald-600 hover:text-emerald-700 text-xs font-bold uppercase tracking-wider px-2 py-1 rounded hover:bg-emerald-50 transition-colors flex items-center gap-1"
                             title="Gerar Relatório Analítico (PDF)"
                           >
@@ -447,14 +475,7 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
         )}
       </AnimatePresence>
     
-      {reportIntegradoId && (
-        <LoteReportModal
-          integradoId={reportIntegradoId}
-          visits={visits}
-          integrados={integrados}
-          onClose={() => setReportIntegradoId(null)}
-        />
-      )}
+
       
       {selectedIntegradoDetails && (
         <IntegradoDetailsModal
@@ -464,6 +485,19 @@ export function Integrados({ integrados, visits, totalVisits, onUpdate, onDelete
           onClose={() => setSelectedIntegradoDetails(null)}
         />
       )}
+    
+      <ConsolidatedLotesModal
+        isOpen={isConsolidadoModalOpen}
+        onClose={() => setIsConsolidadoModalOpen(false)}
+        integrados={integrados}
+        visits={visits}
+        onGenerate={(selectedLotesArray) => {
+          const selectedVisits = visits.filter(v => selectedLotesArray.some(l => l.id === v.integradoId));
+          generateConsolidadoLotesPDF(selectedLotesArray, selectedVisits, configs, empresas);
+          setIsConsolidadoModalOpen(false);
+        }}
+      />
+
     </div>
   );
 }

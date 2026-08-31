@@ -2,6 +2,7 @@ import { safeStorage } from "../lib/safeStorage";
 import React, { useState, useEffect } from 'react';
 import { Integrado, Empresa } from '../types';
 import { supabase } from '../lib/supabase';
+import { generateUUID } from '../utils/uuid';
 
 interface IntegradoFormProps {
   onSave: (integrado: Integrado) => void;
@@ -72,7 +73,7 @@ export function IntegradoForm({ onSave, onCancel }: IntegradoFormProps) {
     const selectedEmp = empresas.find(emp => emp.id === selectedEmpresaId);
     
     onSave({
-      id: `i_${Date.now()}`,
+      id: generateUUID(),
       name,
       loteNumber,
       alojamentoDate: date,

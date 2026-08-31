@@ -1,0 +1,2 @@
+Bug fix: React state holding previous client's curve ID and phase table in ReferenceCurve.
+Bug fix: DB script forgot to update programa_alimentar phase duration to 104 days for Mugnol.

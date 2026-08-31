@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Empresa, EmpresaConfig, UserProfile, CurveConfig } from '../types';
 import { Save, AlertCircle, Plus, Trash2, Settings, X, RotateCcw, Check } from 'lucide-react';
-import { defaultPastreProgramaAlimentar, defaultBugioProgramaAlimentar, defaultBtzProgramaAlimentar, DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE, DEFAULT_TECNICOS, growthCurvesMisto, growthCurveFemea, defaultMetas, defaultMetasFemea } from '../data';
+import { DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE, DEFAULT_TECNICOS, growthCurvesMisto, growthCurveFemea, defaultMetas, defaultMetasFemea } from '../data';
 import { getEmpresaConfigsLocal } from '../lib/storage';
 
 interface EmpresaConfigGestaoProps {
@@ -117,26 +117,16 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
       let activeData = data || localCfg;
       
       if (data && localCfg) {
-         if (empresaId === '00000000-0000-0000-0000-000000000003') {
+         if (!data.curva_desempenho || data.curva_desempenho.length === 0) {
              activeData = { 
                 ...data, 
                 curva_desempenho: localCfg.curva_desempenho,
-                programa_alimentar: localCfg.programa_alimentar
+                programa_alimentar: localCfg.programa_alimentar || data.programa_alimentar
              };
          }
       }
 
       if (activeData) {
-        if (empresaId === '00000000-0000-0000-0000-000000000001') {
-           activeData.programa_alimentar = defaultPastreProgramaAlimentar;
-        } else if (empresaId === '00000000-0000-0000-0000-000000000002') {
-           activeData.programa_alimentar = defaultBugioProgramaAlimentar;
-        } else {
-           const emp = empresasList.length > 0 ? empresasList.find(e => e.id === empresaId) : empresas.find(e => e.id === empresaId);
-           if (emp?.nome.toLowerCase().includes('btz') && (!activeData.programa_alimentar || activeData.programa_alimentar.length === 0)) {
-               activeData.programa_alimentar = defaultBtzProgramaAlimentar;
-           }
-        }
         setConfig(activeData);
         setTipoCalculo(activeData.tipo_calculo_curva || 'DIA_UM');
         setMetaMortalidade(activeData.meta_mortalidade || 0);

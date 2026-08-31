@@ -31,7 +31,7 @@ import {
   cacheAuthSession, 
   clearAuthCache, 
   filterIntegradosForUser, 
-  filterVisitsForUser 
+  filterVisitsForUser, getCachedAuthSession 
 } from './lib/auth';
 
 // Exponential backoff helper for network requests
@@ -204,6 +204,14 @@ export default function App() {
  // Non-blocking background sync using exponential backoff
  const syncInBackground = useCallback(async (isManual = false) => {
  if (isSyncInProgressRef.current) return;
+ 
+ // Se estivermos usando uma sessão offline mockada, não tentamos sincronizar
+ const cachedSession = getCachedAuthSession();
+ if (cachedSession?.user?.id?.includes('offline')) {
+    setIsSyncing(false);
+    return;
+ }
+ 
  if (typeof navigator !== 'undefined' && !navigator.onLine) {
    setIsOnline(false);
    setIsSyncing(false);
@@ -235,14 +243,11 @@ export default function App() {
      }
    );
 
-   // Update in-memory state with freshly synchronized local store
-   const dataIntegrados = await storage.getIntegrados();
-   const dataVisits = await storage.getVisits();
-   setIntegrados(Array.isArray(dataIntegrados) ? dataIntegrados : []);
-   setVisits(Array.isArray(dataVisits) ? dataVisits : []);
-   setPendingSyncIds(storage.getPendingSyncIds());
    setSyncRetryStatus(null);
  } catch (err: any) {
+   // Even if it throws (e.g., offline queue partially failed), we might have downloaded new data.
+   // So we still want to update the in-memory state!
+
    console.warn('Sync attempt completed with warnings (persisting offline):', err);
    if (isManual) {
      if (!(err?.message?.includes('fetch') || err?.message?.includes('Failed') || String(err).includes('fetch') || String(err).includes('Failed'))) {
@@ -250,6 +255,11 @@ export default function App() {
      }
    }
  } finally {
+   const dataIntegrados = await storage.getIntegrados();
+   const dataVisits = await storage.getVisits();
+   setIntegrados(Array.isArray(dataIntegrados) ? dataIntegrados : []);
+   setVisits(Array.isArray(dataVisits) ? dataVisits : []);
+   setPendingSyncIds(storage.getPendingSyncIds());
    isSyncInProgressRef.current = false;
    setIsSyncing(false);
    setSyncRetryStatus(null);
@@ -778,8 +788,7 @@ export default function App() {
  visits={visibleVisits}
  totalVisits={visibleVisits.length}
  onUpdate={handleUpdateIntegrado}
- onDelete={handleDeleteIntegrado}
- />
+ onDelete={handleDeleteIntegrado} empresas={empresas} />
  )}
  
  {currentTab === 'medicamentos' && <MedicationAnalysis visits={visibleVisits} integrados={visibleIntegrados} />}
@@ -820,7 +829,29 @@ export default function App() {
  }
 
  
-  if (loading) {
+  
+ const handleLogout = useCallback(async () => {
+   clearAuthCache();
+   setCurrentUserProfile(null);
+    setMasterUserProfile(null);
+   setSession(null);
+   try {
+     await supabase.auth.signOut();
+   } catch (e) {
+     console.warn('Logout error:', e);
+   }
+ }, []);
+
+ useEffect(() => {
+   const onSessionExpired = () => {
+     handleLogout();
+     alert("Sua sessão expirou ou você acessou a rede após trabalhar offline. Por favor, faça login novamente para sincronizar seus dados.");
+   };
+   window.addEventListener('session-expired', onSessionExpired);
+   return () => window.removeEventListener('session-expired', onSessionExpired);
+ }, [handleLogout]);
+
+if (loading) {
  
   return (
  <div className="flex h-screen items-center justify-center bg-slate-50">
@@ -837,18 +868,6 @@ export default function App() {
    loadData();
  }} />;
  }
-
- const handleLogout = async () => {
-   clearAuthCache();
-   setCurrentUserProfile(null);
-    setMasterUserProfile(null);
-   setSession(null);
-   try {
-     await supabase.auth.signOut();
-   } catch (e) {
-     console.warn('Logout error:', e);
-   }
- };
 
 
  return (
@@ -925,7 +944,7 @@ export default function App() {
  </div>
  <div className="flex items-center gap-1 sm:gap-4 shrink-0">
  <div className="hidden lg:flex flex-col items-end justify-center mr-2">
- <span className="text-xs text-slate-500 font-medium whitespace-nowrap">Data: {new Date().toLocaleDateString('pt-BR')}</span>
+ <span className="text-xs text-slate-500 font-medium whitespace-nowrap">Hoje: {new Date().toLocaleDateString('pt-BR')}</span>
  </div>
  
 

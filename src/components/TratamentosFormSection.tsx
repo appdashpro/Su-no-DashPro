@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Tratamento, GrowthCurvePoint } from '../types';
 import { getActiveCurve, DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE } from '../data';
+import { generateUUID } from '../utils/uuid';
 
 interface MedicationMemory {
   produto: string;
@@ -136,7 +137,7 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
     onChange([
       ...tratamentos,
       {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         produto: '',
         doseMgKg: 0,
         duracaoDias: 0,

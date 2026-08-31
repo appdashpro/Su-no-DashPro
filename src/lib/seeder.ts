@@ -1,5 +1,6 @@
 import { Integrado, Visit, Tratamento } from '../types';
 import { safeStorage } from './safeStorage';
+import { generateUUID } from '../utils/uuid';
 
 const INTEGRADOS_KEY = 'suino_dashpro_integrados';
 const VISITS_KEY = 'suino_dashpro_visits';
@@ -75,9 +76,9 @@ export const seedTestLots = () => {
         const date3 = new Date(now);
         date3.setDate(date3.getDate() - 90);
 
-        const lote1Id = crypto.randomUUID();
-        const lote2Id = crypto.randomUUID();
-        const lote3Id = crypto.randomUUID();
+        const lote1Id = generateUUID();
+        const lote2Id = generateUUID();
+        const lote3Id = generateUUID();
 
         const newIntegrados: Integrado[] = [
             {
@@ -120,7 +121,7 @@ export const seedTestLots = () => {
 
             // Day 1 visit
             newVisits.push({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 integradoId,
                 date: alojDateStr,
                 idade: 1,
@@ -148,14 +149,14 @@ export const seedTestLots = () => {
                 currentWeight += (i * 0.05);
 
                 const tratamentos: Tratamento[] | undefined = (i === 30) ? [
-                    { id: crypto.randomUUID(), produto: 'Amoxicilina', doseMgKg: 20, duracaoDias: 5, motivo: 'Prevenção' }
+                    { id: generateUUID(), produto: 'Amoxicilina', doseMgKg: 20, duracaoDias: 5, motivo: 'Prevenção' }
                 ] : undefined;
 
                 cumulativeMortos += Math.floor(Math.random() * 5) + 1;
                 cumulativeDescartes += Math.floor(Math.random() * 3);
                 
                 newVisits.push({
-                    id: crypto.randomUUID(),
+                    id: generateUUID(),
                     integradoId,
                     date: formatDate(visitDate),
                     idade: i,

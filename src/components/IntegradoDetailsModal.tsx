@@ -41,12 +41,13 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
   const finalMetaMortalidade = (currentConfig?.meta_mortalidade !== undefined && currentConfig?.meta_mortalidade !== null) ? currentConfig.meta_mortalidade : 0.5;
 
   const loteVisits = visits.filter(v => v.integradoId === integradoId).sort((a, b) => (a.idade || 0) - (b.idade || 0));
+  const latestVisit = loteVisits.length > 0 ? loteVisits[loteVisits.length - 1] : null;
   
   const maxIdade = Math.max(105, ...(loteVisits.map(v => v.idade || 0)));
   const chartData = [];
   for (let d = 1; d <= maxIdade; d++) {
      const visit = loteVisits.find(v => v.idade === d);
-     const currentConfig = configs.find(c => c.empresa_id === lote?.empresaId);
+     const currentConfig = configs.find((c: any) => c.empresa_id === lote?.empresaId);
      const esperado = getExpectedConsumption(d, loteVisits[0]?.tipoLote, loteVisits[0]?.pesoAloj, lote?.alojamentoDate, lote?.status, lote?.fechamentoDate, currentConfig, undefined, loteVisits[0]?.date);
      
      chartData.push({
@@ -90,7 +91,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
   const mortalityData = [];
   for (let d = 1; d <= maxIdade; d++) {
     const visit = loteVisits.find(v => v.idade === d);
-    const proportionalMeta = Number(finalMetaMortalidade);
+    const proportionalMeta = Number(((d / maxIdade) * finalMetaMortalidade).toFixed(2));
     if (visit) {
       const alojados = visit.animaisAlojados || loteVisits[0]?.animaisAlojados || 1;
       const mortos = visit.animaisMortos || 0;
@@ -419,6 +420,78 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                 </div>
               </div>
 
+
+              <div className="mb-8 mt-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-0">Programa Alimentar (Meta vs Realizado)</h4>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                   <table className="w-full text-sm text-left whitespace-nowrap">
+                     <thead className="bg-slate-50 border-b border-slate-100 text-xs text-slate-500 uppercase">
+                       <tr>
+                         <th className="px-4 py-3 font-semibold">Fase</th>
+                         <th className="px-4 py-3 font-semibold text-right">Meta</th>
+                         <th className="px-4 py-3 font-semibold text-right">Realizado</th>
+                         <th className="px-4 py-3 font-semibold text-center">Aderência</th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-100">
+                       {[
+                         { name: 'Alojamento', metaKey: 'metaAlojamento', realKey: 'consumoAlojamento' },
+                         { name: 'Crescimento 1', metaKey: 'metaCrescimento1', realKey: 'consumoCrescimento1' },
+                         { name: 'Crescimento 2', metaKey: 'metaCrescimento2', realKey: 'consumoCrescimento2' },
+                         { name: 'Crescimento 3', metaKey: 'metaCrescimento3', realKey: 'consumoCrescimento3' },
+                         { name: 'Terminação 1', metaKey: 'metaTerminacao1', realKey: 'consumoTerminacao1' },
+                         { name: 'Terminação 2', metaKey: 'metaTerminacao2', realKey: 'consumoTerminacao2' },
+                       ].map((fase) => {
+                         const meta = metas ? (metas as any)[fase.metaKey] : null;
+                         const real = latestVisit ? (latestVisit as any)[fase.realKey] : null;
+                         
+                         if (!meta && !real) return null;
+                         
+                         let status = '-';
+                         let statusClass = 'text-slate-400';
+                         let textClass = 'text-slate-800';
+                         if (meta !== null && meta !== undefined && real !== null && real !== undefined && Number(real) > 0) {
+                            const adherence = (Number(real) / Number(meta)) * 100;
+                            status = adherence.toFixed(1) + '%';
+                            if (adherence >= 95 && adherence <= 105) {
+                               statusClass = 'text-blue-600 bg-blue-50';
+                               textClass = 'text-blue-600';
+                            } else if (adherence > 105) {
+                               statusClass = 'text-red-600 bg-red-50';
+                               textClass = 'text-red-600';
+                            } else {
+                               statusClass = 'text-emerald-600 bg-emerald-50';
+                               textClass = 'text-emerald-600';
+                            }
+                         } else if (meta !== null && (real === null || real === undefined || Number(real) === 0)) {
+                            status = 'Pendente';
+                            statusClass = 'text-slate-500 bg-slate-100';
+                            textClass = 'text-slate-400';
+                         }
+                         
+                         return (
+                           <tr key={fase.name} className="hover:bg-slate-50/50 transition-colors">
+                             <td className="px-4 py-3 font-medium text-slate-700">{fase.name}</td>
+                             <td className="px-4 py-3 text-right text-slate-600">{meta !== null && meta !== undefined ? Number(meta).toFixed(2) + ' kg' : '-'}</td>
+                             <td className={`px-4 py-3 text-right font-bold ${textClass}`}>{real !== null && real !== undefined && Number(real) > 0 ? Number(real).toFixed(2) + ' kg' : '-'}</td>
+                             <td className="px-4 py-3 text-center">
+                               {status !== '-' ? (
+                                 <span className={`text-[10px] font-bold px-2 py-1 rounded ${statusClass}`}>
+                                   {status}
+                                 </span>
+                               ) : '-'}
+                             </td>
+                           </tr>
+                         );
+                       })}
+                     </tbody>
+                   </table>
+                  </div>
+                </div>
+              </div>
               <h4 className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wider">Histórico de Visitas</h4>
 
               <div className="space-y-3">

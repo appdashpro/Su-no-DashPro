@@ -2,6 +2,7 @@ import { safeStorage } from './safeStorage';
 import { supabase } from './supabase';
 import { createClient } from '@supabase/supabase-js';
 import { UserProfile, PapelUsuario, Integrado, Visit } from '../types';
+import { generateUUID } from '../utils/uuid';
 
 const PROFILE_KEY = 'suino_dashpro_user_profile';
 const SESSION_CACHE_KEY = 'suino_dashpro_cached_session';
@@ -336,7 +337,7 @@ export async function saveUserWithPermissions(
       }
 
       const userPayload = {
-        auth_uid: resolvedAuthUid || user.auth_uid || existingAuthUid || crypto.randomUUID(),
+        auth_uid: resolvedAuthUid || user.auth_uid || existingAuthUid || generateUUID(),
         email: emailNorm,
         nome: user.nome,
         papel: user.papel,

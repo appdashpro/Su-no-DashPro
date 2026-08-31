@@ -129,7 +129,7 @@ export function Sidebar({ currentTab, setCurrentTab, onStartTutorial, userProfil
 
         {lastSyncTime && (
           <div className="text-center text-[10px] text-slate-500/80 font-medium">
-            Sinc: {new Date(lastSyncTime).toLocaleDateString('pt-BR')} {new Date(lastSyncTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            Última sinc: {new Date(lastSyncTime).toLocaleDateString('pt-BR')} {new Date(lastSyncTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
           </div>
         )}
       </div>

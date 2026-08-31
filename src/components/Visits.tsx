@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Visit, Integrado, isVisitForIntegrado } from '../types';
 import { getExpectedConsumption, getActiveCurve } from '../data';
-import { Search, ArrowUpDown, Download, Plus, Eye, X, Trash2 } from 'lucide-react';
+import { Search, ArrowUpDown, Download, Plus, Eye, X, Trash2, Bug, Trash, FileText } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { getSavedUserProfile } from '../lib/auth';
-import { getEmpresaConfigsLocal } from '../lib/storage';
+import { getEmpresaConfigsLocal, getSyncLogs, clearSyncLogs } from '../lib/storage';
+import { generateVisitaPDF, generateConsolidadoPDF, generateConsolidadoCompletePDF } from '../reports/pdfGenerator';
+import { ConsolidatedVisitasModal } from './ConsolidatedVisitasModal';
 
 interface VisitsListProps {
  pendingSyncIds?: string[];
@@ -17,7 +19,7 @@ interface VisitsListProps {
  onExport?: (data?: Visit[]) => void;
  viewingIntegradoId?: string | null;
  onSetViewingIntegradoId?: (id: string | null) => void;
-  empresas?: {id: string, nome: string}[];
+  empresas?: import('../types').Empresa[];
 }
 
 type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'idade-desc' | 'idade-asc';
@@ -27,6 +29,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  const [searchTerm, setSearchTerm] = useState('');
  const [sortBy, setSortBy] = useState<SortOption>('date-desc');
  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isConsolidadoModalOpen, setIsConsolidadoModalOpen] = useState(false);
  const [internalSelected, setInternalSelected] = useState<string | null>(null);
   const userProfile = getSavedUserProfile();
   const isTecnicoCliente = userProfile?.papel === 'TECNICO_CLIENTE';
@@ -95,6 +98,13 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  />
  </div>
  <div className="flex gap-2 w-full sm:w-auto">
+ <button 
+   onClick={() => setIsConsolidadoModalOpen(true)}
+   className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded text-sm font-semibold hover:bg-blue-100 transition-colors shadow-sm whitespace-nowrap"
+ >
+   <FileText className="w-4 h-4" />
+   <span className="hidden lg:inline">PDF Consolidado</span>
+ </button>
  {onExport && (
  <button 
  onClick={() => onExport && onExport(filteredVisits)} 
@@ -104,6 +114,8 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <span className="hidden lg:inline">Exportar</span>
  </button>
  )}
+
+
  {onNewLote && (
  <button onClick={onNewLote} className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-emerald-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-emerald-700 transition-colors">
  <Plus className="w-4 h-4" />
@@ -134,7 +146,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Descartes</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Mortalidade (%)</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Vol. Cargas (kg)</th>
- <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Recomendação</th>
+ <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap min-w-[650px] text-left">Recomendação</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Consumo acumulado</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Comedouro</th>
  <th className="px-2 py-2 border-b border-slate-200 whitespace-nowrap">Colaborador</th>
@@ -175,6 +187,10 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  const expected = getExpectedConsumption(v.idade, v.tipoLote, v.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig, undefined, v.date);
  const activeCurveInfo = getActiveCurve(integrado?.alojamentoDate, integrado?.status, v.tipoLote, integrado?.fechamentoDate, currentConfig, undefined, v.date);
  const metas = activeCurveInfo?.metas || {};
+ const finalMeta = currentConfig?.meta_mortalidade !== undefined && currentConfig?.meta_mortalidade !== null ? currentConfig.meta_mortalidade : 3;
+ const propMeta = v.idade ? Number(((Math.min(v.idade, 105) / 105) * finalMeta).toFixed(2)) : finalMeta;
+ const mVal = v.mortalidade !== undefined && v.mortalidade !== null ? Number(v.mortalidade) : (v.animaisAlojados && v.animaisMortos ? (Number(v.animaisMortos) / Number(v.animaisAlojados)) * 100 : null);
+ const isOverMeta = mVal !== null && mVal > propMeta;
 
  const alojados = Number(v.animaisAlojados) || 0;
  const mortos = Number(v.animaisMortos) || 0;
@@ -226,13 +242,15 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  <td className="px-2 py-2 whitespace-nowrap">{v.animaisMortos ?? '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap">{v.descartesPeriodo ?? '-'}</td>
  <td className="px-2 py-2 whitespace-nowrap">
- {v.mortalidade !== undefined && v.mortalidade !== null 
- ? <span className="text-xs font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{Number(v.mortalidade || 0).toFixed(2)}%</span> 
- : v.animaisAlojados && v.animaisMortos ? <span className="text-xs font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{((Number(v.animaisMortos)/Number(v.animaisAlojados))*100).toFixed(2)}%</span> : '-'}
+ {mVal !== null ? (
+   <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${isOverMeta ? 'text-red-600 bg-red-50' : 'text-slate-600 bg-slate-50'}`} title={`Meta para esta idade: ${propMeta.toFixed(2)}%`}>
+     {mVal.toFixed(2)}%
+   </span>
+ ) : '-'}
  </td>
  <td className="px-2 py-2 whitespace-nowrap">{v.volumeTotalCargas ?? '-'}</td>
  <td className="px-2 py-2">
- <div className="text-xs leading-relaxed min-w-[300px] whitespace-pre-wrap" title={v.recomendacao}>
+ <div className="text-xs leading-relaxed min-w-[650px] max-w-[900px] whitespace-pre-wrap text-left" title={v.recomendacao}>
  {v.recomendacao ? (
  <div className="space-y-1">
  {v.recomendacao.split('\n').filter(l => l.trim()).map((line, i) => (
@@ -273,6 +291,19 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  
  <td className="px-2 py-2 whitespace-nowrap sticky right-0 bg-white group-hover:bg-slate-50 transition-colors z-10 w-[60px]">
  <div className="flex flex-col gap-1 items-center">
+ <button
+  onClick={() => {
+    const integradoForVisit = getIntegradoForVisit(v);
+    const empresa = empresas.find(e => e.id === integradoForVisit?.empresaId);
+    const currentConfig = configs.find((c: any) => c.empresa_id === integradoForVisit?.empresaId);
+    const loteVisits = visits.filter(visit => isVisitForIntegrado(visit, integradoForVisit!)).sort((a, b) => (a.idade || 0) - (b.idade || 0));
+    generateVisitaPDF(v, integradoForVisit || null, empresa, currentConfig, loteVisits);
+  }}
+  className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold px-2 py-1 rounded hover:bg-emerald-50 transition-colors w-full text-center flex justify-center items-center gap-1"
+  title="Baixar PDF da Visita"
+ >
+  <FileText size={14} /> PDF
+ </button>
  <button
  onClick={() => setSelectedIntegradoDetails(v.integradoId)}
  className="text-slate-600 hover:text-slate-900 text-xs font-semibold px-2 py-1 rounded hover:bg-slate-100 transition-colors w-full text-center"
@@ -353,7 +384,21 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  </motion.div>
  </div>
  )}
- </AnimatePresence>
- </div>
- );
+ 
+</AnimatePresence>
+
+      <ConsolidatedVisitasModal
+        isOpen={isConsolidadoModalOpen}
+        onClose={() => setIsConsolidadoModalOpen(false)}
+        visits={visits}
+        integrados={integrados}
+        empresas={empresas}
+        onGenerate={(selectedVisits) => {
+          generateConsolidadoCompletePDF(selectedVisits, integrados, empresas, configs, visits);
+          setIsConsolidadoModalOpen(false);
+        }}
+      />
+
+</div>
+  );
 }

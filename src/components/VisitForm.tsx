@@ -8,6 +8,7 @@ import { Info } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { TratamentosFormSection } from './TratamentosFormSection';
 import { AvaliacaoTecnicaSection } from './AvaliacaoTecnicaSection';
+import { generateUUID } from '../utils/uuid';
 
 interface VisitaFormProps {
  integrados: Integrado[];
@@ -98,7 +99,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
      if (matchName) {
        targetIntegradoId = matchName.id;
      } else {
-       targetIntegradoId = crypto.randomUUID();
+       targetIntegradoId = generateUUID();
      }
    }
  }
@@ -107,7 +108,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
 
  onSave({
  ...visitData,
- id: initialData ? initialData.id : crypto.randomUUID(),
+ id: initialData ? initialData.id : generateUUID(),
  curva_consumo_id: activeCurve?.id,
  integradoId,
  idade: Number(visitData.idade) || 0,
@@ -305,14 +306,21 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  const integrado = matchingIntegrado || integrados.find(i => i.id === currentIntegradoId);
   const currentConfig = configs.find((c: any) => c.empresa_id === (formData.empresaId || integrado?.empresaId));
   const currentIdade = Number(formData.idade) || 0;
+  const finalMetaMortalidade = currentConfig?.meta_mortalidade !== undefined && currentConfig?.meta_mortalidade !== null ? currentConfig.meta_mortalidade : 3;
+  const propMetaMortalidade = currentIdade ? Number(((Math.min(currentIdade, 105) / 105) * finalMetaMortalidade).toFixed(2)) : finalMetaMortalidade;
+  const isOverMetaMortalidade = Number(formData.mortalidade || 0) > propMetaMortalidade;
  const activeCurve = getActiveCurve(integrado?.alojamentoDate, integrado?.status, formData.tipoLote as any, integrado?.fechamentoDate, currentConfig, initialData?.curva_consumo_id, formData.date);
  const resolvedCurvaId = activeCurve?.id;
  const expectedConsumption = currentIdade > 0 ? getExpectedConsumption(currentIdade, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig, resolvedCurvaId, formData.date) : null;
  const expectedWeight = currentIdade > 0 ? getExpectedWeight(currentIdade, formData.tipoLote as any, formData.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig, resolvedCurvaId, formData.date) : null;
 
   let racaoRecomendada = '';
-  if (currentConfig?.programa_alimentar && Array.isArray(currentConfig.programa_alimentar) && currentConfig.programa_alimentar.length > 0) {
-    const matchingPhase = currentConfig.programa_alimentar.find((p: any) => currentIdade >= Number(p.dia_inicio) && currentIdade <= Number(p.dia_fim));
+  const progAlim = (activeCurve && activeCurve.programa_alimentar && activeCurve.programa_alimentar.length > 0)
+    ? activeCurve.programa_alimentar
+    : currentConfig?.programa_alimentar;
+    
+  if (progAlim && Array.isArray(progAlim) && progAlim.length > 0) {
+    const matchingPhase = progAlim.find((p: any) => currentIdade >= Number(p.dia_inicio) && currentIdade <= Number(p.dia_fim));
     if (matchingPhase) racaoRecomendada = matchingPhase.racao;
   }
 
@@ -516,7 +524,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  <label className="block text-xs font-semibold text-slate-500 mb-1 flex justify-between items-center">
  <span>Animais Mortos</span>
  {formData.mortalidade !== undefined && formData.mortalidade !== null && !isNaN(Number(formData.mortalidade)) && (
- <span className="flex items-center gap-2"><span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[10px]">{(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0) - (Number(formData.descartesPeriodo) || 0)} vivos</span><span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded text-[10px]">{Number(formData.mortalidade || 0).toFixed(2)}%</span></span>
+ <span className="flex items-center gap-2"><span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[10px]">{(Number(formData.animaisAlojados) || 0) - (Number(formData.animaisMortos) || 0) - (Number(formData.descartesPeriodo) || 0)} vivos</span><span className={`font-bold px-2 py-0.5 rounded text-[10px] ${isOverMetaMortalidade ? 'text-red-600 bg-red-50' : 'text-slate-600 bg-slate-100'}`} title={`Meta proporcional: ${propMetaMortalidade.toFixed(2)}%`}>{Number(formData.mortalidade || 0).toFixed(2)}%</span></span>
  )}
  </label>
  <input 
@@ -780,25 +788,62 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  <h3 className="text-sm font-bold text-slate-500 mb-4">Acompanhamento de Consumo (Interativo)</h3>
  <div className="h-64 bg-slate-50 border border-slate-200 rounded-lg p-2 md:p-4 min-w-0">
  <ResponsiveContainer width="100%" height="100%">
- <LineChart data={dynamicChartData} margin={{ top: 5, right: 20, bottom: 25, left: 0 }}>
- <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
- <XAxis dataKey="dia" type="number" domain={['dataMin', 'dataMax']} label={{ value: 'Idade (Dias)', position: 'insideBottom', offset: -10 }} stroke="#64748b" fontSize={12} />
- <YAxis label={{ value: 'Consumo (kg)', angle: -90, position: 'insideLeft' }} stroke="#64748b" fontSize={12} />
- <Tooltip cursor={{ stroke: '#cbd5e1' }} contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
- <Line type="monotone" dataKey="consumoAcumulado" stroke="#3b82f6" strokeWidth={3} dot={{ r: 0 }} activeDot={{ r: 4 }} name="Esperado" />
- {formData.consumoAcumuladoReal !== undefined && String(formData.consumoAcumuladoReal) !== '' && (
- <ReferenceDot 
- x={currentIdade} 
- y={Number(formData.consumoAcumuladoReal)} 
- r={6} 
- fill={(currentDiffKg !== null && Math.abs(currentDiffKg) <= 5) ? "#3b82f6" : (currentDiffKg !== null && currentDiffKg < -5) ? "#10b981" : "#ef4444"} 
- stroke="white" 
- strokeWidth={2}
- 
- />
- )}
- </LineChart>
- </ResponsiveContainer>
+      <LineChart data={dynamicChartData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+        <XAxis dataKey="dia" type="number" domain={['dataMin', 'dataMax']} label={{ value: 'Idade (Dias)', position: 'bottom', offset: 0 }} stroke="#64748b" fontSize={12} />
+        <YAxis label={{ value: 'Consumo (kg)', angle: -90, position: 'insideLeft', offset: 15 }} stroke="#64748b" fontSize={12} />
+        <Tooltip 
+          cursor={{ stroke: '#cbd5e1' }} 
+          content={({ active, payload, label }: any) => {
+            if (active && payload && payload.length) {
+              const data = payload[0].payload;
+              const isCurrentAge = label === currentIdade;
+              const realConsumo = (isCurrentAge && formData.consumoAcumuladoReal !== undefined && String(formData.consumoAcumuladoReal) !== '') 
+                ? Number(formData.consumoAcumuladoReal) 
+                : undefined;
+              
+              let realDiff = null;
+              let colorClass = "text-slate-700";
+              if (realConsumo !== undefined) {
+                realDiff = realConsumo - data.consumoAcumulado;
+                if (Math.abs(realDiff) <= 5) colorClass = "text-blue-600";
+                else if (realDiff < -5) colorClass = "text-emerald-600";
+                else colorClass = "text-red-600";
+              }
+
+              return (
+                <div className="bg-white p-3 border border-slate-200 rounded-lg shadow-md text-sm">
+                  <p className="font-bold text-slate-700 mb-2">Idade: {label} dias</p>
+                  <p className="text-slate-600">Consumo Meta: <span className="font-semibold text-slate-900">{data.consumoAcumulado.toFixed(2)} kg</span></p>
+                  
+                  {isCurrentAge && realConsumo !== undefined && (
+                    <>
+                      <div className="my-2 border-t border-slate-100"></div>
+                      <p className="text-slate-600">Consumo Real: <span className="font-semibold text-slate-900">{realConsumo.toFixed(2)} kg</span></p>
+                      <p className={colorClass + " font-medium mt-1"}>
+                        Fuga da Meta: {realDiff! > 0 ? '+' : ''}{realDiff!.toFixed(2)} kg
+                      </p>
+                    </>
+                  )}
+                </div>
+              );
+            }
+            return null;
+          }}
+        />
+        <Line type="monotone" dataKey="consumoAcumulado" stroke="#3b82f6" strokeWidth={3} dot={{ r: 0 }} activeDot={{ r: 4 }} name="Esperado" />
+        {formData.consumoAcumuladoReal !== undefined && String(formData.consumoAcumuladoReal) !== '' && (
+          <ReferenceDot 
+            x={currentIdade} 
+            y={Number(formData.consumoAcumuladoReal)} 
+            r={6} 
+            fill={(currentDiffKg !== null && Math.abs(currentDiffKg) <= 5) ? "#3b82f6" : (currentDiffKg !== null && currentDiffKg < -5) ? "#10b981" : "#ef4444"} 
+            stroke="white" 
+            strokeWidth={2}
+          />
+        )}
+      </LineChart>
+    </ResponsiveContainer>
  <p className="text-xs text-center text-slate-500 mt-2">
  O ponto colorido mostra o consumo real atual vs a curva esperada.<br className="md:hidden" />
  <span className="inline-block w-3 h-3 rounded-full bg-blue-500 ml-2 mr-1 align-middle"></span> Na meta (±5kg)

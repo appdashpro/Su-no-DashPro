@@ -22,120 +22,6 @@ export interface CurveVersion {
 }
 
 const growthCurveV1: GrowthCurvePoint[] = [
-  { dia: 1, pesoInicial: 20.000, pesoFinal: 20.680, cmd: 1.089, consumoAcumulado: 1.089, gpd: 0.680 },
-  { dia: 2, pesoInicial: 20.680, pesoFinal: 21.370, cmd: 1.116, consumoAcumulado: 2.205, gpd: 0.690 },
-  { dia: 3, pesoInicial: 21.370, pesoFinal: 22.080, cmd: 1.143, consumoAcumulado: 3.347, gpd: 0.710 },
-  { dia: 4, pesoInicial: 22.080, pesoFinal: 22.790, cmd: 1.169, consumoAcumulado: 4.516, gpd: 0.710 },
-  { dia: 5, pesoInicial: 22.790, pesoFinal: 23.520, cmd: 1.196, consumoAcumulado: 5.712, gpd: 0.730 },
-  { dia: 6, pesoInicial: 23.520, pesoFinal: 24.270, cmd: 1.222, consumoAcumulado: 6.935, gpd: 0.750 },
-  { dia: 7, pesoInicial: 24.270, pesoFinal: 25.030, cmd: 1.249, consumoAcumulado: 8.183, gpd: 0.760 },
-  { dia: 8, pesoInicial: 25.030, pesoFinal: 25.800, cmd: 1.275, consumoAcumulado: 9.458, gpd: 0.770 },
-  { dia: 9, pesoInicial: 25.800, pesoFinal: 26.580, cmd: 1.301, consumoAcumulado: 10.759, gpd: 0.780 },
-  { dia: 10, pesoInicial: 26.580, pesoFinal: 27.380, cmd: 1.327, consumoAcumulado: 12.087, gpd: 0.800 },
-  { dia: 11, pesoInicial: 27.380, pesoFinal: 28.190, cmd: 1.353, consumoAcumulado: 13.440, gpd: 0.810 },
-  { dia: 12, pesoInicial: 28.190, pesoFinal: 29.010, cmd: 1.379, consumoAcumulado: 14.819, gpd: 0.820 },
-  { dia: 13, pesoInicial: 29.010, pesoFinal: 29.850, cmd: 1.405, consumoAcumulado: 16.224, gpd: 0.840 },
-  { dia: 14, pesoInicial: 29.850, pesoFinal: 30.700, cmd: 1.431, consumoAcumulado: 17.654, gpd: 0.850 },
-  { dia: 15, pesoInicial: 30.700, pesoFinal: 31.570, cmd: 1.498, consumoAcumulado: 19.153, gpd: 0.870 },
-  { dia: 16, pesoInicial: 31.570, pesoFinal: 32.440, cmd: 1.525, consumoAcumulado: 20.677, gpd: 0.870 },
-  { dia: 17, pesoInicial: 32.440, pesoFinal: 33.330, cmd: 1.551, consumoAcumulado: 22.228, gpd: 0.890 },
-  { dia: 18, pesoInicial: 33.330, pesoFinal: 34.220, cmd: 1.576, consumoAcumulado: 23.804, gpd: 0.890 },
-  { dia: 19, pesoInicial: 34.220, pesoFinal: 35.120, cmd: 1.602, consumoAcumulado: 25.406, gpd: 0.900 },
-  { dia: 20, pesoInicial: 35.120, pesoFinal: 36.020, cmd: 1.627, consumoAcumulado: 27.034, gpd: 0.900 },
-  { dia: 21, pesoInicial: 36.020, pesoFinal: 36.940, cmd: 1.652, consumoAcumulado: 28.686, gpd: 0.920 },
-  { dia: 22, pesoInicial: 36.940, pesoFinal: 37.860, cmd: 1.677, consumoAcumulado: 30.363, gpd: 0.920 },
-  { dia: 23, pesoInicial: 37.860, pesoFinal: 38.790, cmd: 1.702, consumoAcumulado: 32.064, gpd: 0.930 },
-  { dia: 24, pesoInicial: 38.790, pesoFinal: 39.730, cmd: 1.726, consumoAcumulado: 33.790, gpd: 0.940 },
-  { dia: 25, pesoInicial: 39.730, pesoFinal: 40.670, cmd: 1.750, consumoAcumulado: 35.540, gpd: 0.940 },
-  { dia: 26, pesoInicial: 40.670, pesoFinal: 41.620, cmd: 1.774, consumoAcumulado: 37.314, gpd: 0.950 },
-  { dia: 27, pesoInicial: 41.620, pesoFinal: 42.590, cmd: 1.797, consumoAcumulado: 39.111, gpd: 0.970 },
-  { dia: 28, pesoInicial: 42.590, pesoFinal: 43.550, cmd: 1.821, consumoAcumulado: 40.932, gpd: 0.960 },
-  { dia: 29, pesoInicial: 43.550, pesoFinal: 44.530, cmd: 1.844, consumoAcumulado: 42.776, gpd: 0.980 },
-  { dia: 30, pesoInicial: 44.530, pesoFinal: 45.510, cmd: 1.867, consumoAcumulado: 44.642, gpd: 0.980 },
-  { dia: 31, pesoInicial: 45.510, pesoFinal: 46.500, cmd: 1.889, consumoAcumulado: 46.531, gpd: 0.990 },
-  { dia: 32, pesoInicial: 46.500, pesoFinal: 47.500, cmd: 1.912, consumoAcumulado: 48.443, gpd: 1.000 },
-  { dia: 33, pesoInicial: 47.500, pesoFinal: 48.500, cmd: 1.974, consumoAcumulado: 50.418, gpd: 1.000 },
-  { dia: 34, pesoInicial: 48.500, pesoFinal: 49.510, cmd: 1.997, consumoAcumulado: 52.414, gpd: 1.010 },
-  { dia: 35, pesoInicial: 49.510, pesoFinal: 50.520, cmd: 2.019, consumoAcumulado: 54.433, gpd: 1.010 },
-  { dia: 36, pesoInicial: 50.520, pesoFinal: 51.520, cmd: 2.041, consumoAcumulado: 56.474, gpd: 1.000 },
-  { dia: 37, pesoInicial: 51.520, pesoFinal: 52.540, cmd: 2.062, consumoAcumulado: 58.535, gpd: 1.020 },
-  { dia: 38, pesoInicial: 52.540, pesoFinal: 53.560, cmd: 2.083, consumoAcumulado: 60.618, gpd: 1.020 },
-  { dia: 39, pesoInicial: 53.560, pesoFinal: 54.580, cmd: 2.104, consumoAcumulado: 62.722, gpd: 1.020 },
-  { dia: 40, pesoInicial: 54.580, pesoFinal: 55.610, cmd: 2.124, consumoAcumulado: 64.847, gpd: 1.030 },
-  { dia: 41, pesoInicial: 55.610, pesoFinal: 56.650, cmd: 2.145, consumoAcumulado: 66.992, gpd: 1.040 },
-  { dia: 42, pesoInicial: 56.650, pesoFinal: 57.700, cmd: 2.165, consumoAcumulado: 69.157, gpd: 1.050 },
-  { dia: 43, pesoInicial: 57.700, pesoFinal: 58.750, cmd: 2.185, consumoAcumulado: 71.342, gpd: 1.050 },
-  { dia: 44, pesoInicial: 58.750, pesoFinal: 59.800, cmd: 2.205, consumoAcumulado: 73.546, gpd: 1.050 },
-  { dia: 45, pesoInicial: 59.800, pesoFinal: 60.860, cmd: 2.224, consumoAcumulado: 75.770, gpd: 1.060 },
-  { dia: 46, pesoInicial: 60.860, pesoFinal: 61.930, cmd: 2.243, consumoAcumulado: 78.014, gpd: 1.070 },
-  { dia: 47, pesoInicial: 61.930, pesoFinal: 62.990, cmd: 2.300, consumoAcumulado: 80.314, gpd: 1.060 },
-  { dia: 48, pesoInicial: 62.990, pesoFinal: 64.060, cmd: 2.319, consumoAcumulado: 82.633, gpd: 1.070 },
-  { dia: 49, pesoInicial: 64.060, pesoFinal: 65.130, cmd: 2.338, consumoAcumulado: 84.971, gpd: 1.070 },
-  { dia: 50, pesoInicial: 65.130, pesoFinal: 66.200, cmd: 2.356, consumoAcumulado: 87.327, gpd: 1.070 },
-  { dia: 51, pesoInicial: 66.200, pesoFinal: 67.280, cmd: 2.374, consumoAcumulado: 89.701, gpd: 1.080 },
-  { dia: 52, pesoInicial: 67.280, pesoFinal: 68.360, cmd: 2.392, consumoAcumulado: 92.092, gpd: 1.080 },
-  { dia: 53, pesoInicial: 68.360, pesoFinal: 69.450, cmd: 2.409, consumoAcumulado: 94.502, gpd: 1.090 },
-  { dia: 54, pesoInicial: 69.450, pesoFinal: 70.530, cmd: 2.426, consumoAcumulado: 96.928, gpd: 1.080 },
-  { dia: 55, pesoInicial: 70.530, pesoFinal: 71.620, cmd: 2.443, consumoAcumulado: 99.371, gpd: 1.090 },
-  { dia: 56, pesoInicial: 71.620, pesoFinal: 72.710, cmd: 2.460, consumoAcumulado: 101.831, gpd: 1.090 },
-  { dia: 57, pesoInicial: 72.710, pesoFinal: 73.810, cmd: 2.476, consumoAcumulado: 104.308, gpd: 1.100 },
-  { dia: 58, pesoInicial: 73.810, pesoFinal: 74.900, cmd: 2.492, consumoAcumulado: 106.800, gpd: 1.090 },
-  { dia: 59, pesoInicial: 74.900, pesoFinal: 75.990, cmd: 2.508, consumoAcumulado: 109.308, gpd: 1.090 },
-  { dia: 60, pesoInicial: 75.990, pesoFinal: 77.090, cmd: 2.524, consumoAcumulado: 111.832, gpd: 1.100 },
-  { dia: 61, pesoInicial: 77.090, pesoFinal: 78.180, cmd: 2.539, consumoAcumulado: 114.370, gpd: 1.090 },
-  { dia: 62, pesoInicial: 78.180, pesoFinal: 79.280, cmd: 2.553, consumoAcumulado: 116.924, gpd: 1.100 },
-  { dia: 63, pesoInicial: 79.280, pesoFinal: 80.370, cmd: 2.568, consumoAcumulado: 119.492, gpd: 1.090 },
-  { dia: 64, pesoInicial: 80.370, pesoFinal: 81.460, cmd: 2.582, consumoAcumulado: 122.074, gpd: 1.090 },
-  { dia: 65, pesoInicial: 81.460, pesoFinal: 82.810, cmd: 2.680, consumoAcumulado: 124.754, gpd: 1.350 },
-  { dia: 66, pesoInicial: 82.810, pesoFinal: 84.150, cmd: 2.698, consumoAcumulado: 127.452, gpd: 1.340 },
-  { dia: 67, pesoInicial: 84.150, pesoFinal: 85.490, cmd: 2.714, consumoAcumulado: 130.166, gpd: 1.340 },
-  { dia: 68, pesoInicial: 85.490, pesoFinal: 86.810, cmd: 2.731, consumoAcumulado: 132.897, gpd: 1.320 },
-  { dia: 69, pesoInicial: 86.810, pesoFinal: 88.120, cmd: 2.746, consumoAcumulado: 135.643, gpd: 1.310 },
-  { dia: 70, pesoInicial: 88.120, pesoFinal: 89.430, cmd: 2.761, consumoAcumulado: 138.405, gpd: 1.310 },
-  { dia: 71, pesoInicial: 89.430, pesoFinal: 90.720, cmd: 2.776, consumoAcumulado: 141.181, gpd: 1.290 },
-  { dia: 72, pesoInicial: 90.720, pesoFinal: 92.000, cmd: 2.790, consumoAcumulado: 143.970, gpd: 1.280 },
-  { dia: 73, pesoInicial: 92.000, pesoFinal: 93.260, cmd: 2.803, consumoAcumulado: 146.774, gpd: 1.260 },
-  { dia: 74, pesoInicial: 93.260, pesoFinal: 94.520, cmd: 2.816, consumoAcumulado: 149.590, gpd: 1.260 },
-  { dia: 75, pesoInicial: 94.520, pesoFinal: 95.740, cmd: 2.827, consumoAcumulado: 152.417, gpd: 1.220 },
-  { dia: 76, pesoInicial: 95.740, pesoFinal: 96.940, cmd: 2.839, consumoAcumulado: 155.256, gpd: 1.200 },
-  { dia: 77, pesoInicial: 96.940, pesoFinal: 98.130, cmd: 2.850, consumoAcumulado: 158.106, gpd: 1.190 },
-  { dia: 78, pesoInicial: 98.130, pesoFinal: 99.300, cmd: 2.861, consumoAcumulado: 160.967, gpd: 1.170 },
-  { dia: 79, pesoInicial: 99.300, pesoFinal: 100.470, cmd: 2.871, consumoAcumulado: 163.839, gpd: 1.170 },
-  { dia: 80, pesoInicial: 100.470, pesoFinal: 101.620, cmd: 2.881, consumoAcumulado: 166.720, gpd: 1.150 },
-  { dia: 81, pesoInicial: 101.620, pesoFinal: 102.750, cmd: 2.891, consumoAcumulado: 169.611, gpd: 1.130 },
-  { dia: 82, pesoInicial: 102.750, pesoFinal: 103.880, cmd: 2.900, consumoAcumulado: 172.511, gpd: 1.130 },
-  { dia: 83, pesoInicial: 103.880, pesoFinal: 104.990, cmd: 2.900, consumoAcumulado: 175.411, gpd: 1.110 },
-  { dia: 84, pesoInicial: 104.990, pesoFinal: 106.090, cmd: 2.900, consumoAcumulado: 178.311, gpd: 1.100 },
-  { dia: 85, pesoInicial: 106.090, pesoFinal: 107.180, cmd: 2.900, consumoAcumulado: 181.211, gpd: 1.090 },
-  { dia: 86, pesoInicial: 107.180, pesoFinal: 108.230, cmd: 2.900, consumoAcumulado: 184.112, gpd: 1.050 },
-  { dia: 87, pesoInicial: 108.230, pesoFinal: 109.270, cmd: 2.900, consumoAcumulado: 187.012, gpd: 1.040 },
-  { dia: 88, pesoInicial: 109.270, pesoFinal: 110.280, cmd: 2.900, consumoAcumulado: 189.912, gpd: 1.010 },
-  { dia: 89, pesoInicial: 110.280, pesoFinal: 111.300, cmd: 2.900, consumoAcumulado: 192.812, gpd: 1.020 },
-  { dia: 90, pesoInicial: 111.300, pesoFinal: 112.320, cmd: 2.900, consumoAcumulado: 195.712, gpd: 1.020 },
-  { dia: 91, pesoInicial: 112.320, pesoFinal: 113.340, cmd: 2.900, consumoAcumulado: 198.612, gpd: 1.020 },
-  { dia: 92, pesoInicial: 113.340, pesoFinal: 114.350, cmd: 2.900, consumoAcumulado: 201.512, gpd: 1.010 },
-  { dia: 93, pesoInicial: 114.350, pesoFinal: 115.370, cmd: 2.900, consumoAcumulado: 204.412, gpd: 1.020 },
-  { dia: 94, pesoInicial: 115.370, pesoFinal: 116.390, cmd: 2.900, consumoAcumulado: 207.312, gpd: 1.020 },
-  { dia: 95, pesoInicial: 116.390, pesoFinal: 117.400, cmd: 2.900, consumoAcumulado: 210.212, gpd: 1.010 },
-  { dia: 96, pesoInicial: 117.400, pesoFinal: 118.420, cmd: 2.900, consumoAcumulado: 213.112, gpd: 1.020 },
-  { dia: 97, pesoInicial: 118.420, pesoFinal: 119.430, cmd: 2.900, consumoAcumulado: 216.012, gpd: 1.010 },
-  { dia: 98, pesoInicial: 119.430, pesoFinal: 120.440, cmd: 2.900, consumoAcumulado: 218.912, gpd: 1.010 },
-
-];
-
-
-const defaultMetasV1 = {
-  metaAlojamento: 17.65,
-  metaCrescimento1: 30.79,
-  metaCrescimento2: 29.57,
-  metaCrescimento3: 44.06,
-  metaTerminacao1: 27.52,
-  metaTerminacao2: 63.52,
-  metaAcumulada: 213.11
-};
-
-
-const growthCurveV2: GrowthCurvePoint[] = [
   {
     "dia": 1,
     "pesoInicial": 20,
@@ -921,7 +807,9 @@ const growthCurveV2: GrowthCurvePoint[] = [
     "gpd": 1.01
   }
 ];
-const defaultMetasV2 = {
+
+
+const defaultMetasV1 = {
   "metaAlojamento": 17.65,
   "metaCrescimento1": 30.79,
   "metaCrescimento2": 29.57,
@@ -929,6 +817,819 @@ const defaultMetasV2 = {
   "metaTerminacao1": 27.52,
   "metaTerminacao2": 63.52,
   "metaAcumulada": 213.11
+};
+
+
+const growthCurveV2: GrowthCurvePoint[] = [
+  {
+    "dia": 1,
+    "pesoInicial": 22.3,
+    "pesoFinal": 23,
+    "cmd": 1.08,
+    "consumoAcumulado": 1.08,
+    "gpd": 0.7
+  },
+  {
+    "dia": 2,
+    "pesoInicial": 23,
+    "pesoFinal": 23.72,
+    "cmd": 1.093,
+    "consumoAcumulado": 2.17,
+    "gpd": 0.719
+  },
+  {
+    "dia": 3,
+    "pesoInicial": 23.72,
+    "pesoFinal": 24.45,
+    "cmd": 1.116,
+    "consumoAcumulado": 3.29,
+    "gpd": 0.731
+  },
+  {
+    "dia": 4,
+    "pesoInicial": 24.45,
+    "pesoFinal": 25.19,
+    "cmd": 1.14,
+    "consumoAcumulado": 4.43,
+    "gpd": 0.743
+  },
+  {
+    "dia": 5,
+    "pesoInicial": 25.19,
+    "pesoFinal": 25.95,
+    "cmd": 1.163,
+    "consumoAcumulado": 5.59,
+    "gpd": 0.755
+  },
+  {
+    "dia": 6,
+    "pesoInicial": 25.95,
+    "pesoFinal": 26.71,
+    "cmd": 1.186,
+    "consumoAcumulado": 6.78,
+    "gpd": 0.767
+  },
+  {
+    "dia": 7,
+    "pesoInicial": 26.71,
+    "pesoFinal": 27.49,
+    "cmd": 1.209,
+    "consumoAcumulado": 7.99,
+    "gpd": 0.779
+  },
+  {
+    "dia": 8,
+    "pesoInicial": 27.49,
+    "pesoFinal": 28.29,
+    "cmd": 1.232,
+    "consumoAcumulado": 9.22,
+    "gpd": 0.792
+  },
+  {
+    "dia": 9,
+    "pesoInicial": 28.29,
+    "pesoFinal": 29.09,
+    "cmd": 1.255,
+    "consumoAcumulado": 10.48,
+    "gpd": 0.804
+  },
+  {
+    "dia": 10,
+    "pesoInicial": 29.09,
+    "pesoFinal": 29.91,
+    "cmd": 1.278,
+    "consumoAcumulado": 11.75,
+    "gpd": 0.816
+  },
+  {
+    "dia": 11,
+    "pesoInicial": 29.91,
+    "pesoFinal": 30.73,
+    "cmd": 1.301,
+    "consumoAcumulado": 13.06,
+    "gpd": 0.827
+  },
+  {
+    "dia": 12,
+    "pesoInicial": 30.73,
+    "pesoFinal": 31.57,
+    "cmd": 1.323,
+    "consumoAcumulado": 14.38,
+    "gpd": 0.835
+  },
+  {
+    "dia": 13,
+    "pesoInicial": 31.57,
+    "pesoFinal": 32.41,
+    "cmd": 1.346,
+    "consumoAcumulado": 15.72,
+    "gpd": 0.842
+  },
+  {
+    "dia": 14,
+    "pesoInicial": 32.41,
+    "pesoFinal": 33.26,
+    "cmd": 1.368,
+    "consumoAcumulado": 17.09,
+    "gpd": 0.849
+  },
+  {
+    "dia": 15,
+    "pesoInicial": 33.26,
+    "pesoFinal": 34.11,
+    "cmd": 1.39,
+    "consumoAcumulado": 18.48,
+    "gpd": 0.856
+  },
+  {
+    "dia": 16,
+    "pesoInicial": 34.11,
+    "pesoFinal": 35.04,
+    "cmd": 1.575,
+    "consumoAcumulado": 20.06,
+    "gpd": 0.93
+  },
+  {
+    "dia": 17,
+    "pesoInicial": 35.04,
+    "pesoFinal": 35.98,
+    "cmd": 1.601,
+    "consumoAcumulado": 21.66,
+    "gpd": 0.938
+  },
+  {
+    "dia": 18,
+    "pesoInicial": 35.98,
+    "pesoFinal": 36.93,
+    "cmd": 1.626,
+    "consumoAcumulado": 23.28,
+    "gpd": 0.946
+  },
+  {
+    "dia": 19,
+    "pesoInicial": 36.93,
+    "pesoFinal": 37.88,
+    "cmd": 1.652,
+    "consumoAcumulado": 24.94,
+    "gpd": 0.954
+  },
+  {
+    "dia": 20,
+    "pesoInicial": 37.88,
+    "pesoFinal": 38.85,
+    "cmd": 1.677,
+    "consumoAcumulado": 26.61,
+    "gpd": 0.962
+  },
+  {
+    "dia": 21,
+    "pesoInicial": 38.85,
+    "pesoFinal": 39.82,
+    "cmd": 1.701,
+    "consumoAcumulado": 28.31,
+    "gpd": 0.971
+  },
+  {
+    "dia": 22,
+    "pesoInicial": 39.82,
+    "pesoFinal": 40.79,
+    "cmd": 1.726,
+    "consumoAcumulado": 30.04,
+    "gpd": 0.979
+  },
+  {
+    "dia": 23,
+    "pesoInicial": 40.79,
+    "pesoFinal": 41.78,
+    "cmd": 1.75,
+    "consumoAcumulado": 31.79,
+    "gpd": 0.986
+  },
+  {
+    "dia": 24,
+    "pesoInicial": 41.78,
+    "pesoFinal": 42.78,
+    "cmd": 1.774,
+    "consumoAcumulado": 33.56,
+    "gpd": 0.994
+  },
+  {
+    "dia": 25,
+    "pesoInicial": 42.78,
+    "pesoFinal": 43.78,
+    "cmd": 1.798,
+    "consumoAcumulado": 35.36,
+    "gpd": 1.002
+  },
+  {
+    "dia": 26,
+    "pesoInicial": 43.78,
+    "pesoFinal": 44.79,
+    "cmd": 1.821,
+    "consumoAcumulado": 37.18,
+    "gpd": 1.01
+  },
+  {
+    "dia": 27,
+    "pesoInicial": 44.79,
+    "pesoFinal": 45.81,
+    "cmd": 1.845,
+    "consumoAcumulado": 39.03,
+    "gpd": 1.018
+  },
+  {
+    "dia": 28,
+    "pesoInicial": 45.81,
+    "pesoFinal": 46.83,
+    "cmd": 1.868,
+    "consumoAcumulado": 40.9,
+    "gpd": 1.026
+  },
+  {
+    "dia": 29,
+    "pesoInicial": 46.83,
+    "pesoFinal": 47.87,
+    "cmd": 1.89,
+    "consumoAcumulado": 42.79,
+    "gpd": 1.034
+  },
+  {
+    "dia": 30,
+    "pesoInicial": 47.87,
+    "pesoFinal": 48.91,
+    "cmd": 1.913,
+    "consumoAcumulado": 44.7,
+    "gpd": 1.041
+  },
+  {
+    "dia": 31,
+    "pesoInicial": 48.91,
+    "pesoFinal": 49.96,
+    "cmd": 1.935,
+    "consumoAcumulado": 46.63,
+    "gpd": 1.049
+  },
+  {
+    "dia": 32,
+    "pesoInicial": 49.96,
+    "pesoFinal": 51,
+    "cmd": 1.957,
+    "consumoAcumulado": 48.59,
+    "gpd": 1.044
+  },
+  {
+    "dia": 33,
+    "pesoInicial": 51,
+    "pesoFinal": 52.05,
+    "cmd": 1.979,
+    "consumoAcumulado": 50.57,
+    "gpd": 1.051
+  },
+  {
+    "dia": 34,
+    "pesoInicial": 52.05,
+    "pesoFinal": 53.11,
+    "cmd": 2,
+    "consumoAcumulado": 52.57,
+    "gpd": 1.058
+  },
+  {
+    "dia": 35,
+    "pesoInicial": 53.11,
+    "pesoFinal": 54.22,
+    "cmd": 2.181,
+    "consumoAcumulado": 54.75,
+    "gpd": 1.108
+  },
+  {
+    "dia": 36,
+    "pesoInicial": 54.22,
+    "pesoFinal": 55.33,
+    "cmd": 2.204,
+    "consumoAcumulado": 56.96,
+    "gpd": 1.115
+  },
+  {
+    "dia": 37,
+    "pesoInicial": 55.33,
+    "pesoFinal": 56.45,
+    "cmd": 2.227,
+    "consumoAcumulado": 59.18,
+    "gpd": 1.123
+  },
+  {
+    "dia": 38,
+    "pesoInicial": 56.45,
+    "pesoFinal": 57.58,
+    "cmd": 2.25,
+    "consumoAcumulado": 61.43,
+    "gpd": 1.13
+  },
+  {
+    "dia": 39,
+    "pesoInicial": 57.58,
+    "pesoFinal": 58.72,
+    "cmd": 2.272,
+    "consumoAcumulado": 63.7,
+    "gpd": 1.137
+  },
+  {
+    "dia": 40,
+    "pesoInicial": 58.72,
+    "pesoFinal": 59.86,
+    "cmd": 2.294,
+    "consumoAcumulado": 66,
+    "gpd": 1.143
+  },
+  {
+    "dia": 41,
+    "pesoInicial": 59.86,
+    "pesoFinal": 61.01,
+    "cmd": 2.316,
+    "consumoAcumulado": 68.32,
+    "gpd": 1.15
+  },
+  {
+    "dia": 42,
+    "pesoInicial": 61.01,
+    "pesoFinal": 62.17,
+    "cmd": 2.338,
+    "consumoAcumulado": 70.65,
+    "gpd": 1.156
+  },
+  {
+    "dia": 43,
+    "pesoInicial": 62.17,
+    "pesoFinal": 63.33,
+    "cmd": 2.359,
+    "consumoAcumulado": 73.01,
+    "gpd": 1.162
+  },
+  {
+    "dia": 44,
+    "pesoInicial": 63.33,
+    "pesoFinal": 64.5,
+    "cmd": 2.38,
+    "consumoAcumulado": 75.39,
+    "gpd": 1.167
+  },
+  {
+    "dia": 45,
+    "pesoInicial": 64.5,
+    "pesoFinal": 65.67,
+    "cmd": 2.401,
+    "consumoAcumulado": 77.79,
+    "gpd": 1.172
+  },
+  {
+    "dia": 46,
+    "pesoInicial": 65.67,
+    "pesoFinal": 66.85,
+    "cmd": 2.421,
+    "consumoAcumulado": 80.22,
+    "gpd": 1.177
+  },
+  {
+    "dia": 47,
+    "pesoInicial": 66.85,
+    "pesoFinal": 68.03,
+    "cmd": 2.441,
+    "consumoAcumulado": 82.66,
+    "gpd": 1.182
+  },
+  {
+    "dia": 48,
+    "pesoInicial": 68.03,
+    "pesoFinal": 69.22,
+    "cmd": 2.461,
+    "consumoAcumulado": 85.12,
+    "gpd": 1.186
+  },
+  {
+    "dia": 49,
+    "pesoInicial": 69.22,
+    "pesoFinal": 70.4,
+    "cmd": 2.524,
+    "consumoAcumulado": 87.64,
+    "gpd": 1.184
+  },
+  {
+    "dia": 50,
+    "pesoInicial": 70.4,
+    "pesoFinal": 71.59,
+    "cmd": 2.543,
+    "consumoAcumulado": 90.18,
+    "gpd": 1.187
+  },
+  {
+    "dia": 51,
+    "pesoInicial": 71.59,
+    "pesoFinal": 72.78,
+    "cmd": 2.562,
+    "consumoAcumulado": 92.75,
+    "gpd": 1.19
+  },
+  {
+    "dia": 52,
+    "pesoInicial": 72.78,
+    "pesoFinal": 73.97,
+    "cmd": 2.581,
+    "consumoAcumulado": 95.33,
+    "gpd": 1.193
+  },
+  {
+    "dia": 53,
+    "pesoInicial": 73.97,
+    "pesoFinal": 75.16,
+    "cmd": 2.599,
+    "consumoAcumulado": 97.93,
+    "gpd": 1.195
+  },
+  {
+    "dia": 54,
+    "pesoInicial": 75.16,
+    "pesoFinal": 76.36,
+    "cmd": 2.617,
+    "consumoAcumulado": 100.54,
+    "gpd": 1.196
+  },
+  {
+    "dia": 55,
+    "pesoInicial": 76.36,
+    "pesoFinal": 77.56,
+    "cmd": 2.634,
+    "consumoAcumulado": 103.18,
+    "gpd": 1.198
+  },
+  {
+    "dia": 56,
+    "pesoInicial": 77.56,
+    "pesoFinal": 78.76,
+    "cmd": 2.651,
+    "consumoAcumulado": 105.83,
+    "gpd": 1.199
+  },
+  {
+    "dia": 57,
+    "pesoInicial": 78.76,
+    "pesoFinal": 79.96,
+    "cmd": 2.668,
+    "consumoAcumulado": 108.5,
+    "gpd": 1.199
+  },
+  {
+    "dia": 58,
+    "pesoInicial": 79.96,
+    "pesoFinal": 81.15,
+    "cmd": 2.685,
+    "consumoAcumulado": 111.18,
+    "gpd": 1.199
+  },
+  {
+    "dia": 59,
+    "pesoInicial": 81.15,
+    "pesoFinal": 82.35,
+    "cmd": 2.701,
+    "consumoAcumulado": 113.88,
+    "gpd": 1.199
+  },
+  {
+    "dia": 60,
+    "pesoInicial": 82.35,
+    "pesoFinal": 83.55,
+    "cmd": 2.716,
+    "consumoAcumulado": 116.6,
+    "gpd": 1.198
+  },
+  {
+    "dia": 61,
+    "pesoInicial": 83.55,
+    "pesoFinal": 84.75,
+    "cmd": 2.731,
+    "consumoAcumulado": 119.33,
+    "gpd": 1.195
+  },
+  {
+    "dia": 62,
+    "pesoInicial": 84.75,
+    "pesoFinal": 85.94,
+    "cmd": 2.746,
+    "consumoAcumulado": 122.08,
+    "gpd": 1.19
+  },
+  {
+    "dia": 63,
+    "pesoInicial": 85.94,
+    "pesoFinal": 87.12,
+    "cmd": 2.761,
+    "consumoAcumulado": 124.84,
+    "gpd": 1.186
+  },
+  {
+    "dia": 64,
+    "pesoInicial": 87.12,
+    "pesoFinal": 88.3,
+    "cmd": 2.775,
+    "consumoAcumulado": 127.61,
+    "gpd": 1.18
+  },
+  {
+    "dia": 65,
+    "pesoInicial": 88.3,
+    "pesoFinal": 89.48,
+    "cmd": 2.788,
+    "consumoAcumulado": 130.4,
+    "gpd": 1.175
+  },
+  {
+    "dia": 66,
+    "pesoInicial": 89.48,
+    "pesoFinal": 90.65,
+    "cmd": 2.802,
+    "consumoAcumulado": 133.2,
+    "gpd": 1.169
+  },
+  {
+    "dia": 67,
+    "pesoInicial": 90.65,
+    "pesoFinal": 91.81,
+    "cmd": 2.814,
+    "consumoAcumulado": 136.02,
+    "gpd": 1.163
+  },
+  {
+    "dia": 68,
+    "pesoInicial": 91.81,
+    "pesoFinal": 92.97,
+    "cmd": 2.827,
+    "consumoAcumulado": 138.84,
+    "gpd": 1.156
+  },
+  {
+    "dia": 69,
+    "pesoInicial": 92.97,
+    "pesoFinal": 94.12,
+    "cmd": 2.839,
+    "consumoAcumulado": 141.68,
+    "gpd": 1.15
+  },
+  {
+    "dia": 70,
+    "pesoInicial": 94.12,
+    "pesoFinal": 95.41,
+    "cmd": 2.806,
+    "consumoAcumulado": 144.49,
+    "gpd": 1.296
+  },
+  {
+    "dia": 71,
+    "pesoInicial": 95.41,
+    "pesoFinal": 96.7,
+    "cmd": 2.819,
+    "consumoAcumulado": 147.31,
+    "gpd": 1.284
+  },
+  {
+    "dia": 72,
+    "pesoInicial": 96.7,
+    "pesoFinal": 97.97,
+    "cmd": 2.831,
+    "consumoAcumulado": 150.14,
+    "gpd": 1.272
+  },
+  {
+    "dia": 73,
+    "pesoInicial": 97.97,
+    "pesoFinal": 99.23,
+    "cmd": 2.843,
+    "consumoAcumulado": 152.98,
+    "gpd": 1.261
+  },
+  {
+    "dia": 74,
+    "pesoInicial": 99.23,
+    "pesoFinal": 100.48,
+    "cmd": 2.854,
+    "consumoAcumulado": 155.84,
+    "gpd": 1.249
+  },
+  {
+    "dia": 75,
+    "pesoInicial": 100.48,
+    "pesoFinal": 101.72,
+    "cmd": 2.864,
+    "consumoAcumulado": 158.7,
+    "gpd": 1.238
+  },
+  {
+    "dia": 76,
+    "pesoInicial": 101.72,
+    "pesoFinal": 102.94,
+    "cmd": 2.875,
+    "consumoAcumulado": 161.57,
+    "gpd": 1.227
+  },
+  {
+    "dia": 77,
+    "pesoInicial": 102.94,
+    "pesoFinal": 104.16,
+    "cmd": 2.884,
+    "consumoAcumulado": 164.46,
+    "gpd": 1.216
+  },
+  {
+    "dia": 78,
+    "pesoInicial": 104.16,
+    "pesoFinal": 105.36,
+    "cmd": 2.894,
+    "consumoAcumulado": 167.35,
+    "gpd": 1.205
+  },
+  {
+    "dia": 79,
+    "pesoInicial": 105.36,
+    "pesoFinal": 106.56,
+    "cmd": 2.903,
+    "consumoAcumulado": 170.26,
+    "gpd": 1.194
+  },
+  {
+    "dia": 80,
+    "pesoInicial": 106.56,
+    "pesoFinal": 107.7,
+    "cmd": 2.834,
+    "consumoAcumulado": 173.09,
+    "gpd": 1.14
+  },
+  {
+    "dia": 81,
+    "pesoInicial": 107.7,
+    "pesoFinal": 108.83,
+    "cmd": 2.841,
+    "consumoAcumulado": 175.93,
+    "gpd": 1.129
+  },
+  {
+    "dia": 82,
+    "pesoInicial": 108.83,
+    "pesoFinal": 109.94,
+    "cmd": 2.849,
+    "consumoAcumulado": 178.78,
+    "gpd": 1.118
+  },
+  {
+    "dia": 83,
+    "pesoInicial": 109.94,
+    "pesoFinal": 111.06,
+    "cmd": 2.871,
+    "consumoAcumulado": 181.65,
+    "gpd": 1.116
+  },
+  {
+    "dia": 84,
+    "pesoInicial": 111.06,
+    "pesoFinal": 112.18,
+    "cmd": 2.898,
+    "consumoAcumulado": 184.55,
+    "gpd": 1.117
+  },
+  {
+    "dia": 85,
+    "pesoInicial": 112.18,
+    "pesoFinal": 113.3,
+    "cmd": 2.925,
+    "consumoAcumulado": 187.47,
+    "gpd": 1.119
+  },
+  {
+    "dia": 86,
+    "pesoInicial": 113.3,
+    "pesoFinal": 114.4,
+    "cmd": 2.952,
+    "consumoAcumulado": 190.43,
+    "gpd": 1.105
+  },
+  {
+    "dia": 87,
+    "pesoInicial": 114.4,
+    "pesoFinal": 115.49,
+    "cmd": 2.98,
+    "consumoAcumulado": 193.41,
+    "gpd": 1.091
+  },
+  {
+    "dia": 88,
+    "pesoInicial": 115.49,
+    "pesoFinal": 116.57,
+    "cmd": 2.98,
+    "consumoAcumulado": 196.39,
+    "gpd": 1.076
+  },
+  {
+    "dia": 89,
+    "pesoInicial": 116.57,
+    "pesoFinal": 117.63,
+    "cmd": 2.98,
+    "consumoAcumulado": 199.37,
+    "gpd": 1.061
+  },
+  {
+    "dia": 90,
+    "pesoInicial": 117.63,
+    "pesoFinal": 118.68,
+    "cmd": 2.98,
+    "consumoAcumulado": 202.35,
+    "gpd": 1.046
+  },
+  {
+    "dia": 91,
+    "pesoInicial": 118.68,
+    "pesoFinal": 119.71,
+    "cmd": 2.98,
+    "consumoAcumulado": 205.33,
+    "gpd": 1.031
+  },
+  {
+    "dia": 92,
+    "pesoInicial": 119.71,
+    "pesoFinal": 120.72,
+    "cmd": 2.98,
+    "consumoAcumulado": 208.31,
+    "gpd": 1.016
+  },
+  {
+    "dia": 93,
+    "pesoInicial": 120.72,
+    "pesoFinal": 121.72,
+    "cmd": 2.98,
+    "consumoAcumulado": 211.29,
+    "gpd": 1
+  },
+  {
+    "dia": 94,
+    "pesoInicial": 121.72,
+    "pesoFinal": 122.71,
+    "cmd": 2.98,
+    "consumoAcumulado": 214.27,
+    "gpd": 0.985
+  },
+  {
+    "dia": 95,
+    "pesoInicial": 122.71,
+    "pesoFinal": 123.69,
+    "cmd": 2.98,
+    "consumoAcumulado": 217.25,
+    "gpd": 0.979
+  },
+  {
+    "dia": 96,
+    "pesoInicial": 123.69,
+    "pesoFinal": 124.66,
+    "cmd": 2.98,
+    "consumoAcumulado": 220.23,
+    "gpd": 0.973
+  },
+  {
+    "dia": 97,
+    "pesoInicial": 124.66,
+    "pesoFinal": 125.63,
+    "cmd": 2.98,
+    "consumoAcumulado": 223.21,
+    "gpd": 0.966
+  },
+  {
+    "dia": 98,
+    "pesoInicial": 125.63,
+    "pesoFinal": 126.59,
+    "cmd": 2.98,
+    "consumoAcumulado": 226.19,
+    "gpd": 0.959
+  },
+  {
+    "dia": 99,
+    "pesoInicial": 126.59,
+    "pesoFinal": 127.54,
+    "cmd": 2.98,
+    "consumoAcumulado": 229.17,
+    "gpd": 0.951
+  },
+  {
+    "dia": 100,
+    "pesoInicial": 127.54,
+    "pesoFinal": 128.48,
+    "cmd": 2.98,
+    "consumoAcumulado": 232.15,
+    "gpd": 0.942
+  }
+];
+const defaultMetasV2 = {
+  "metaAlojamento": 17,
+  "metaCrescimento1": 30.82,
+  "metaCrescimento2": 30.67,
+  "metaCrescimento3": 45.71,
+  "metaTerminacao1": 27.49,
+  "metaTerminacao2": 63.15,
+  "metaAcumulada": 214.85
 };
 
 export const growthCurvesMisto: CurveVersion[] = [
@@ -979,7 +1680,7 @@ export const getActiveCurve = (alojamentoDate?: string, status?: string, tipoLot
       const listToSearch = matchingLote.length > 0 ? matchingLote : configs;
       
       // Sort by effectiveDate ASC
-      const sorted = [...listToSearch].sort((a: any, b: any) => a.dataVigencia.localeCompare(b.dataVigencia));
+      const sorted = [...listToSearch].sort((a: any, b: any) => (a.dataVigencia || "").localeCompare(b.dataVigencia || ""));
       
       let selected = sorted[0];
       for (const cv of sorted) {

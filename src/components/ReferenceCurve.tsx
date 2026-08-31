@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Empresa, EmpresaConfig, CurveConfig, UserProfile } from '../types';
 import { AlertCircle, Check, Save, Edit2, X } from 'lucide-react';
 import { getEmpresaConfigsLocal } from '../lib/storage';
-import { growthCurvesMisto, defaultPastreProgramaAlimentar, defaultBugioProgramaAlimentar, defaultBtzProgramaAlimentar } from '../data';
+import { growthCurvesMisto } from '../data';
 
 interface ReferenceCurveProps {
   currentUser?: UserProfile | null;
@@ -36,6 +36,7 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
 
   useEffect(() => {
     if (selectedEmpresaId) {
+      setSelectedCurvaId(''); // Reset curve selection when changing client
       fetchConfig(selectedEmpresaId);
     } else {
       setConfig(null);
@@ -98,8 +99,9 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
     };
     
     const phaseName = phaseNames[phaseKey];
-    if (phaseName && config?.programa_alimentar) {
-      const prog = config.programa_alimentar.find((p: any) => (p.nome && p.nome.toLowerCase() === phaseName.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phaseName.toLowerCase()));
+    const progAlim = getActiveProgramaAlimentar();
+    if (phaseName && progAlim) {
+      const prog = progAlim.find((p: any) => (p.nome && p.nome.toLowerCase() === phaseName.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phaseName.toLowerCase()));
       if (prog) {
          // To avoid shape collapse on 0, we only apply proportional changes if oldMeta is > 0 and val > 0.
          // If a user types 0, it becomes 0. If they type a number after, they must cancel to restore the curve shape.
@@ -209,91 +211,12 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
       let activeData = data || localCfg;
       
       if (data && localCfg) {
-         if (!data.curva_desempenho || data.curva_desempenho.length === 0 || empId === '00000000-0000-0000-0000-000000000003') {
+         if (!data.curva_desempenho || data.curva_desempenho.length === 0) {
             activeData = { ...data, curva_desempenho: localCfg.curva_desempenho };
          }
       }
 
       if (activeData) {
-        // --- PROGRAMA ALIMENTAR PASTRE HOTFIX ---
-        if (empId === '00000000-0000-0000-0000-000000000001') {
-           activeData.programa_alimentar = defaultPastreProgramaAlimentar;
-        } else if (empId === '00000000-0000-0000-0000-000000000002') {
-           activeData.programa_alimentar = defaultBugioProgramaAlimentar;
-        } else if (empresas.find(e => e.id === empId)?.nome.toLowerCase().includes('btz')) {
-           if (!activeData.programa_alimentar || activeData.programa_alimentar.length === 0) {
-             activeData.programa_alimentar = defaultBtzProgramaAlimentar;
-           }
-        }
-
-        // --- V2 HOTFIX FOR PASTRE ---
-        if (activeData.curva_desempenho && Array.isArray(activeData.curva_desempenho)) {
-           const v2Index = activeData.curva_desempenho.findIndex((c: any) => c.version === 'v2' || (c.nome && c.nome.toLowerCase().includes('v2')));
-           if (v2Index !== -1) {
-             // Force overwrite curve and metas with the official V2 from source code
-             const officialV2 = growthCurvesMisto.find(c => c.version === 'v2');
-             if (officialV2) {
-               activeData.curva_desempenho[v2Index].curve = officialV2.curve;
-               activeData.curva_desempenho[v2Index].metas = officialV2.metas;
-             }
-           }
-        }
-        // -----------------------------
-        // --- BUGIO HOTFIX ---
-        if (empId === '00000000-0000-0000-0000-000000000002') {
-            if (!activeData.curva_desempenho || activeData.curva_desempenho.length === 0 || !activeData.curva_desempenho.find((c: any) => c.version === 'bugio' || (c.nome && c.nome.toLowerCase().includes('bugio')))) {
-               const officialBugio = growthCurvesMisto.find(c => c.version === 'bugio');
-               if (officialBugio) {
-                   activeData.curva_desempenho = activeData.curva_desempenho || [];
-                   activeData.curva_desempenho.push({
-                       id: 'bugio-curve',
-                       nome: 'Curva Bugio',
-                       dataVigencia: officialBugio.effectiveDate,
-                       tipoLote: 'Misto',
-                       version: 'bugio',
-                       tipoCalculo: 'DIA_UM',
-                       metaMortalidade: activeData.meta_mortalidade || 0,
-                       curve: officialBugio.curve,
-                       metas: officialBugio.metas
-                   });
-               }
-            } else {
-               const bugioIndex = activeData.curva_desempenho.findIndex((c: any) => c.version === 'bugio' || (c.nome && c.nome.toLowerCase().includes('bugio')));
-               const officialBugio = growthCurvesMisto.find(c => c.version === 'bugio');
-               if (officialBugio) {
-                   activeData.curva_desempenho[bugioIndex].curve = officialBugio.curve;
-                   activeData.curva_desempenho[bugioIndex].metas = officialBugio.metas;
-               }
-            }
-        }
-        // --- BTZ HOTFIX ---
-        if (empresas.find(e => e.id === empId)?.nome.toLowerCase().includes('btz')) {
-            if (!activeData.curva_desempenho || activeData.curva_desempenho.length === 0 || !activeData.curva_desempenho.find((c: any) => c.version === 'btz' || (c.nome && c.nome.toLowerCase().includes('btz')))) {
-               const officialBtz = growthCurvesMisto.find(c => c.version === 'btz');
-               if (officialBtz) {
-                   activeData.curva_desempenho = activeData.curva_desempenho || [];
-                   activeData.curva_desempenho.push({
-                       id: 'btz-curve',
-                       nome: 'Curva Grupo BTZ',
-                       dataVigencia: officialBtz.effectiveDate,
-                       tipoLote: 'Misto',
-                       version: 'btz',
-                       tipoCalculo: 'DIA_UM',
-                       metaMortalidade: activeData.meta_mortalidade || 0,
-                       curve: officialBtz.curve,
-                       metas: officialBtz.metas
-                   });
-               }
-            } else {
-               const btzIndex = activeData.curva_desempenho.findIndex((c: any) => c.version === 'btz' || (c.nome && c.nome.toLowerCase().includes('btz')));
-               const officialBtz = growthCurvesMisto.find(c => c.version === 'btz');
-               if (officialBtz) {
-                   activeData.curva_desempenho[btzIndex].curve = officialBtz.curve;
-                   activeData.curva_desempenho[btzIndex].metas = officialBtz.metas;
-               }
-            }
-        }
-
         setConfig(activeData);
         if (activeData.curva_desempenho && Array.isArray(activeData.curva_desempenho)) {
            // filter out legacy arrays if they exist, or map them
@@ -339,7 +262,7 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
       const today = new Date().toISOString().split('T')[0];
       const validCurves = [...curvas]
         .filter(c => c.dataVigencia <= today)
-        .sort((a, b) => b.dataVigencia.localeCompare(a.dataVigencia));
+        .sort((a, b) => (b.dataVigencia || "").localeCompare(a.dataVigencia || ""));
       
       if (validCurves.length > 0) {
         setSelectedCurvaId(validCurves[0].id);
@@ -383,12 +306,23 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
   const selectedCurva = currentCurva;
   
   const todayDate = new Date().toISOString().split('T')[0];
-  const activeDateKey = [...curvas].filter(c => c.dataVigencia <= todayDate).sort((a, b) => b.dataVigencia.localeCompare(a.dataVigencia))[0]?.dataVigencia;
+  const activeDateKey = [...curvas].filter(c => c.dataVigencia <= todayDate).sort((a, b) => (b.dataVigencia || "").localeCompare(a.dataVigencia || ""))[0]?.dataVigencia;
   const isActiveGroup = currentGroupKey === activeDateKey;
 
+  const getActiveProgramaAlimentar = () => {
+    if (selectedCurvaId && curvas.length > 0) {
+      const cv = curvas.find(c => c.id === selectedCurvaId);
+      if (cv && cv.programa_alimentar && cv.programa_alimentar.length > 0) {
+        return cv.programa_alimentar;
+      }
+    }
+    return config?.programa_alimentar;
+  };
+
   const getPhaseDuration = (phaseName: string) => {
-    if (!config || !config.programa_alimentar) return '-';
-    const prog = config.programa_alimentar.find((p: any) => (p.nome && p.nome.toLowerCase() === phaseName.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phaseName.toLowerCase()));
+    const progAlim = getActiveProgramaAlimentar();
+    if (!progAlim) return '-';
+    const prog = progAlim.find((p: any) => (p.nome && p.nome.toLowerCase() === phaseName.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phaseName.toLowerCase()));
     if (prog) {
       const dias = (Number(prog.dia_fim) - Number(prog.dia_inicio)) + 1;
       return `${dias}`;
@@ -397,8 +331,9 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
   };
 
   const getPhaseAge = (phaseName: string) => {
-    if (!config || !config.programa_alimentar) return '-';
-    const prog = config.programa_alimentar.find((p: any) => (p.nome && p.nome.toLowerCase() === phaseName.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phaseName.toLowerCase()));
+    const progAlim = getActiveProgramaAlimentar();
+    if (!progAlim) return '-';
+    const prog = progAlim.find((p: any) => (p.nome && p.nome.toLowerCase() === phaseName.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phaseName.toLowerCase()));
     if (prog) {
       return `${prog.dia_inicio} a ${prog.dia_fim}`;
     }
@@ -406,11 +341,12 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
   };
 
   const getTotalDuration = () => {
-    if (!config || !config.programa_alimentar) return '-';
+    const progAlim = getActiveProgramaAlimentar();
+    if (!progAlim) return '-';
     let total = 0;
     const phases = ['Alojamento', 'Crescimento 1', 'Crescimento 2', 'Crescimento 3', 'Terminação 1', 'Terminação 2'];
     phases.forEach(phase => {
-      const prog = config.programa_alimentar.find((p: any) => (p.nome && p.nome.toLowerCase() === phase.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phase.toLowerCase()));
+      const prog = progAlim.find((p: any) => (p.nome && p.nome.toLowerCase() === phase.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phase.toLowerCase()));
       if (prog) {
         total += (Number(prog.dia_fim) - Number(prog.dia_inicio)) + 1;
       }
@@ -419,13 +355,14 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
   };
 
   const getTotalAge = () => {
-    if (!config || !config.programa_alimentar) return '-';
+    const progAlim = getActiveProgramaAlimentar();
+    if (!progAlim) return '-';
     let min = Infinity;
     let max = -Infinity;
     const phases = ['Alojamento', 'Crescimento 1', 'Crescimento 2', 'Crescimento 3', 'Terminação 1', 'Terminação 2'];
     let found = false;
     phases.forEach(phase => {
-      const prog = config.programa_alimentar.find((p: any) => (p.nome && p.nome.toLowerCase() === phase.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phase.toLowerCase()));
+      const prog = progAlim.find((p: any) => (p.nome && p.nome.toLowerCase() === phase.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phase.toLowerCase()));
       if (prog) {
         if (prog.dia_inicio < min) min = prog.dia_inicio;
         if (prog.dia_fim > max) max = prog.dia_fim;

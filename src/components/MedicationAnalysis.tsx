@@ -140,7 +140,7 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
     }, {} as Record<string, any>);
 
     return Object.values(grouped)
-      .sort((a, b) => a.key.localeCompare(b.key))
+      .sort((a, b) => (a.key || "").localeCompare(b.key || ""))
       .map(item => {
         const formattedItem: any = { name: item.label, total: Number(item.total.toFixed(2)) };
         Object.keys(item).forEach(k => {

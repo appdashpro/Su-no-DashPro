@@ -1,5 +1,7 @@
+import { generateUUID } from './uuid';
 import { Integrado, Visit } from '../types';
 import { defaultMetas, defaultMetasFemea, getActiveCurve } from '../data';
+
 
 export interface PreProcessedData {
   integrados: Integrado[];
@@ -348,7 +350,7 @@ export function preprocessImportData(rawData: string): PreProcessedData {
     const { metas } = getActiveCurve(integradoMatch?.alojamentoDate, integradoMatch?.status, tipoLote, integradoMatch?.fechamentoDate, undefined, undefined, dateStr.split('/').reverse().join('-'));
 
     visits.push({
-      id: `v_${crypto.randomUUID()}`,
+      id: `v_${generateUUID()}`,
       integradoId: id,
       date: finalDateStr,
       idade: calculatedIdade,
