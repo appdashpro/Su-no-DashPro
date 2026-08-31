@@ -27,7 +27,7 @@ export function Sidebar({ currentTab, setCurrentTab, onStartTutorial, userProfil
     { id: 'integrados', label: 'Gestão de Lotes', icon: Users, show: true },
     { id: 'medicamentos', label: 'Medicamentos', icon: Activity, show: true },
     { id: 'curva', label: 'Curvas de Consumo', icon: LineChart, show: true },
-    { id: 'importar', label: 'Importar Dados', icon: ClipboardList, show: isMaster || isNutron },
+    { id: 'importar', label: 'Importar Dados', icon: ClipboardList, show: isMaster },
     { id: 'usuarios', label: 'Equipe & Clientes', icon: ShieldCheck, show: isMaster },
     { id: 'parametros', label: 'Parâmetros por Cliente', icon: Settings, show: isMaster || isNutron || isClientTech },
   ].filter(item => item.show);
