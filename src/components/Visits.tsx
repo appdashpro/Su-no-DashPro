@@ -295,7 +295,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
   onClick={() => {
     const integradoForVisit = getIntegradoForVisit(v);
     const empresa = empresas.find(e => e.id === integradoForVisit?.empresaId);
-    const currentConfig = configs.find((c: any) => c.empresa_id === integradoForVisit?.empresaId);
+    const currentConfig = configs.find(c => c.empresa_id === integradoForVisit?.empresaId);
     const loteVisits = visits.filter(visit => isVisitForIntegrado(visit, integradoForVisit!)).sort((a, b) => (a.idade || 0) - (b.idade || 0));
     generateVisitaPDF(v, integradoForVisit || null, empresa, currentConfig, loteVisits);
   }}

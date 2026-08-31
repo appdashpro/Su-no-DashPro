@@ -69,11 +69,11 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  const current = initialData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean);
  
   const cfgs = getEmpresaConfigsLocal();
-  const tCfg = cfgs.find((c: any) => c.empresa_id === (formData?.empresaId));
+  const tCfg = cfgs.find(c => c.empresa_id === (formData?.empresaId));
   const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
   const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
 
- return current.filter(c => !predefined.includes(c)).join(' / ');
+ return current.filter(c => !predefined.includesc).join(' / ');
  });
 
  const handleSubmit = (e: React.FormEvent) => {
@@ -304,7 +304,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  );
  const currentIntegradoId = matchingIntegrado?.id || initialData?.integradoId || `i_${(formData.integradoNome || '').replace(/\s+/g, '').toLowerCase()}_${(formData.alojamentoDate || '').replace(/[-/]/g, '')}`;
  const integrado = matchingIntegrado || integrados.find(i => i.id === currentIntegradoId);
-  const currentConfig = configs.find((c: any) => c.empresa_id === (formData.empresaId || integrado?.empresaId));
+  const currentConfig = configs.find(c => c.empresa_id === (formData.empresaId || integrado?.empresaId));
   const currentIdade = Number(formData.idade) || 0;
   const finalMetaMortalidade = currentConfig?.meta_mortalidade !== undefined && currentConfig?.meta_mortalidade !== null ? currentConfig.meta_mortalidade : 3;
   const propMetaMortalidade = currentIdade ? Number(((Math.min(currentIdade, 105) / 105) * finalMetaMortalidade).toFixed(2)) : finalMetaMortalidade;
@@ -731,11 +731,11 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  onClick={() => {
  
   const cfgs = getEmpresaConfigsLocal();
-  const tCfg = cfgs.find((c: any) => c.empresa_id === (formData?.empresaId));
+  const tCfg = cfgs.find(c => c.empresa_id === (formData?.empresaId));
   const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
   const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
 
- const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter((c: string) => predefined.includes(c)) : [];
+ const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter((c: string) => predefined.includesc) : [];
  let newSelected;
  if (!isSelected) {
  newSelected = [...currentSelected, colab];
@@ -766,11 +766,11 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  setOutrosColab(val);
  
   const cfgs = getEmpresaConfigsLocal();
-  const tCfg = cfgs.find((c: any) => c.empresa_id === (formData?.empresaId));
+  const tCfg = cfgs.find(c => c.empresa_id === (formData?.empresaId));
   const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
   const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
 
- const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter((c: string) => predefined.includes(c)) : [];
+ const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter((c: string) => predefined.includesc) : [];
  const typed = val.split(/\s*[,/;-]\s*/).filter(Boolean);
  setFormData(prev => ({ ...prev, colaborador: [...currentSelected, ...typed].join(' / ') }));
  }}

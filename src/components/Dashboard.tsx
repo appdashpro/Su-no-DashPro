@@ -769,7 +769,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
                     })
                     .map((row) => {
                       const mVal = row.animaisMortos !== undefined ? (Number(row.animaisMortos) / Number(row.animaisAlojados)) * 100 : Number(row.mortalidade || 0);
-                      const configRow = configs.find((c: any) => c.empresa_id === integrados.find(i => i.id === row.integradoId)?.empresaId);
+                      const configRow = configs.find(c => c.empresa_id === integrados.find(i => i.id === row.integradoId)?.empresaId);
                       const finalMeta = configRow?.meta_mortalidade !== undefined && configRow?.meta_mortalidade !== null ? configRow.meta_mortalidade : 3;
                       const propMeta = row.idade ? Number(((Math.min(row.idade, 105) / 105) * finalMeta).toFixed(2)) : finalMeta;
                       

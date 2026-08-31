@@ -132,6 +132,17 @@ export async function resolveUserProfile(email: string, auth_uid?: string): Prom
         .maybeSingle();
 
       if (!error && data) {
+        let permissoes = data.integrado_padrao_id ? [data.integrado_padrao_id] : [];
+        try {
+          const { data: permData } = await supabase
+            .from('usuario_empresas_permitidas')
+            .select('empresa_id')
+            .eq('usuario_id', data.id);
+          if (permData && permData.length > 0) {
+            permissoes = Array.from(new Set([...permissoes, ...permData.map(p => p.empresa_id)]));
+          }
+        } catch(e) { /* ignore */ }
+
         profile = {
           id: data.id,
           auth_uid: data.auth_uid || auth_uid,
@@ -140,7 +151,7 @@ export async function resolveUserProfile(email: string, auth_uid?: string): Prom
           papel: (data.papel as PapelUsuario) || profile.papel,
           empresa_id: data.empresa_id,
           integrado_padrao_id: data.integrado_padrao_id,
-          clientes_permitidos: data.clientes_permitidos || (data.integrado_padrao_id ? [data.integrado_padrao_id] : [])
+          clientes_permitidos: permissoes
         };
       }
     } catch (e) {
@@ -170,8 +181,18 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
         .order('nome');
 
       if (!uErr && usersData && usersData.length > 0) {
+        // Fetch ALL permissions to map to users
+        const { data: permData } = await supabase.from('usuario_empresas_permitidas').select('*');
+        const permMap = new Map<string, string[]>();
+        if (permData) {
+          permData.forEach(p => {
+            if (!permMap.has(p.usuario_id)) permMap.set(p.usuario_id, []);
+            permMap.get(p.usuario_id)!.push(p.empresa_id);
+          });
+        }
+
         const mapped: UserProfile[] = usersData.map(u => {
-          let allowed = u.clientes_permitidos || [];
+          let allowed: string[] = permMap.get(u.id) || [];
           if (u.integrado_padrao_id && !allowed.includes(u.integrado_padrao_id)) {
             allowed = [...allowed, u.integrado_padrao_id];
           }
@@ -229,154 +250,96 @@ export async function saveUserWithPermissions(
   password?: string
 ): Promise<{ success: boolean; authError?: string; authCreated?: boolean }> {
   try {
-    // 1. Update local cache
     const currentList = await fetchAllUsers();
-    const updatedUser: UserProfile = {
-      ...user,
-      clientes_permitidos: allowedIntegradoIds,
-      integrado_padrao_id: user.papel === 'TECNICO_CLIENTE' && allowedIntegradoIds.length > 0 ? allowedIntegradoIds[0] : user.integrado_padrao_id
-    };
-
-    let resolvedAuthUid: string | undefined = user.auth_uid;
+    let isExistingUser = !!user.auth_uid;
     let authCreated = false;
-    let authErrorMsg: string | undefined = undefined;
+    let authErrorMsg = undefined;
+    let resolvedAuthUid = user.auth_uid;
 
-    const existingIdx = currentList.findIndex(u => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
-    const isExistingUser = existingIdx >= 0 || !!user.auth_uid;
-    const targetAuthUid = user.auth_uid || (existingIdx >= 0 ? currentList[existingIdx].auth_uid : null);
-
-    // 2. Auth handling (creation or update)
     if (typeof navigator !== 'undefined' && navigator.onLine) {
-      let rpcExecutedSuccessfully = false;
-      
-      if (isExistingUser && (password || user.email)) {
-        const oldEmail = existingIdx >= 0 ? currentList[existingIdx].email.toLowerCase().trim() : user.email.toLowerCase().trim();
-        
-        // UPDATE EXISTING USER via RPC
-        const { data: rpcSuccess, error: rpcError } = await supabase.rpc('admin_update_user_credentials', {
-          target_old_email: oldEmail,
-          new_email: user.email.toLowerCase().trim(),
-          new_password: password && password.trim().length >= 6 ? password.trim() : null
-        });
-        
-        if (rpcError) {
-          if (rpcError.message?.includes('function') && rpcError.message?.includes('does not exist')) {
-            authErrorMsg = 'rpc_missing';
-            rpcExecutedSuccessfully = true; // We don't want to fallback to signup if RPC is missing, we want to show the modal
-          } else {
-            authErrorMsg = rpcError.message;
-            rpcExecutedSuccessfully = true;
-          }
-        } else if (rpcSuccess === true) {
-          authCreated = true; // Use this flag to indicate auth success
-          resolvedAuthUid = targetAuthUid || undefined;
-          rpcExecutedSuccessfully = true;
-        }
-        // If rpcSuccess === false, the user wasn't found in auth.users. We will let it fallback to signUp.
-      }
-      
-      if (!rpcExecutedSuccessfully && password && password.trim().length >= 6) {
-        // CREATE NEW USER via signUp
+      if (!isExistingUser && password) {
+        // FASE 5: ADMIN CREATE USER (Edge Function / API Backend)
         try {
-          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cnemtndccfppibecjuep.supabase.co';
-          const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_DhXoLwRfFz1txE63iFDdUg_TivovFvj';
-          
-          const tempAuthClient = createClient(supabaseUrl, supabaseKey, {
-            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-          });
-
-          const { data: signUpData, error: signUpError } = await tempAuthClient.auth.signUp({
-            email: user.email.toLowerCase().trim(),
-            password: password.trim()
-          });
-          
-          if (signUpError) {
-            if (signUpError.message?.includes('Signups not allowed') || (signUpError as any).code === 'signup_disabled') {
-              authErrorMsg = 'signup_disabled';
-            } else if (signUpError.message?.includes('already registered') || signUpError.message?.includes('already exists')) {
-              authErrorMsg = 'already_exists';
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          if (token) {
+            const reqBody = {
+              email: user.email,
+              password: password,
+              nome: user.nome,
+              papel: user.papel,
+              empresa_id: user.empresa_id,
+              clientes_permitidos: allowedIntegradoIds
+            };
+            const response = await fetch('/api/admin/create-user', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+              body: JSON.stringify(reqBody)
+            });
+            const resData = await response.json();
+            if (response.ok && resData.user) {
+              // The backend handles inserting the user profile and permissions!
+              return { success: true, authCreated: true };
             } else {
-              authErrorMsg = signUpError.message;
+              return { success: false, authError: resData.error || 'Failed to create user via API' };
             }
-          } else if (signUpData?.user) {
-            resolvedAuthUid = signUpData.user.id;
-            authCreated = true;
+          } else {
+             return { success: false, authError: 'No session token' };
           }
-        } catch (authErr: any) {
-          console.warn('Could not auto-register Supabase auth user:', authErr);
+        } catch(e: any) {
+          console.error("Admin API error", e);
+          return { success: false, authError: e.message };
         }
-      }
-    }
-
-    if (existingIdx >= 0) {
-      currentList[existingIdx] = { ...updatedUser, auth_uid: resolvedAuthUid || currentList[existingIdx].auth_uid };
-    } else {
-      currentList.push({ ...updatedUser, auth_uid: resolvedAuthUid });
-    }
-    safeStorage.setItem(USERS_LIST_KEY, JSON.stringify(currentList));
-
-    // 3. If online, sync directly to Supabase usuarios table
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      const emailNorm = user.email.toLowerCase().trim();
-      
-      const validDbId = user.id && !user.id.startsWith('usr_') ? user.id : null;
-
-      // 1. Determine existing user to preserve auth_uid if needed
-      let existingAuthUid = null;
-      let existingIdToUpdate = validDbId;
-
-      if (validDbId) {
-        const { data: byId } = await supabase.from('usuarios').select('id, auth_uid').eq('id', validDbId).maybeSingle();
-        if (byId) existingAuthUid = byId.auth_uid;
-      } else {
-        const { data: byEmail } = await supabase.from('usuarios').select('id, auth_uid').eq('email', emailNorm).maybeSingle();
-        if (byEmail) {
-          existingAuthUid = byEmail.auth_uid;
-          existingIdToUpdate = byEmail.id;
-        }
-      }
-
-      const userPayload = {
-        auth_uid: resolvedAuthUid || user.auth_uid || existingAuthUid || generateUUID(),
-        email: emailNorm,
-        nome: user.nome,
-        papel: user.papel,
-        empresa_id: user.empresa_id || '00000000-0000-0000-0000-000000000000',
-        integrado_padrao_id: updatedUser.integrado_padrao_id || null,
-        clientes_permitidos: allowedIntegradoIds,
-        ativo: true,
-        updated_at: new Date().toISOString()
-      };
-
-      const { error: upsertErr } = await supabase
-        .from('usuarios')
-        .upsert({
-          id: existingIdToUpdate || undefined,
-          ...userPayload
-        }, { onConflict: 'id' });
+      } else if (isExistingUser) {
+        // Update existing user profile
+        const { error: updateError } = await supabase
+          .from('usuarios')
+          .update({
+            nome: user.nome,
+            papel: user.papel,
+            empresa_id: user.empresa_id || '00000000-0000-0000-0000-000000000000'
+          })
+          .eq('auth_uid', user.auth_uid);
         
-      if (upsertErr) {
-        console.warn('Upsert failed, trying direct update/insert fallback', upsertErr);
-        if (existingIdToUpdate) {
-          const { error: updErr } = await supabase.from('usuarios').update(userPayload).eq('id', existingIdToUpdate);
-          if (updErr) throw updErr;
+        if (updateError) {
+          console.error('Error updating user', updateError);
+          return { success: false, authError: updateError.message };
+        }
+
+        // FASE 3: Sync Permissions to relational table
+        if (allowedIntegradoIds && allowedIntegradoIds.length > 0) {
+          // 1. Delete old
+          await supabase.from('usuario_empresas_permitidas').delete().eq('usuario_id', user.id);
+          // 2. Insert new
+          const permRows = allowedIntegradoIds.map(emp_id => ({ usuario_id: user.id, empresa_id: emp_id }));
+          await supabase.from('usuario_empresas_permitidas').insert(permRows);
         } else {
-          const { error: insErr } = await supabase.from('usuarios').insert(userPayload);
-          if (insErr) throw insErr;
+          // Clear permissions
+          await supabase.from('usuario_empresas_permitidas').delete().eq('usuario_id', user.id);
         }
       }
     }
-    return { success: true, authError: authErrorMsg, authCreated };
-  } catch (e: any) {
-    console.error('Error saving user in usuarios table:', e);
-    // Remove alert if we don't want it, but returning false is key.
-    throw e; // Throw instead of return false so the UI knows there was an error.
+    
+    // Fallback/Local updates
+    const updatedUser = { ...user, clientes_permitidos: allowedIntegradoIds };
+    const existingIdx = currentList.findIndex(u => u.auth_uid === user.auth_uid);
+    if (existingIdx >= 0) {
+      currentList[existingIdx] = updatedUser;
+    } else {
+      currentList.push(updatedUser);
+    }
+    const safeStorage = require('./safeStorage').safeStorage;
+    safeStorage.setItem('suino_dashpro_users_list', JSON.stringify(currentList));
+    
+    return { success: true, authCreated, authError: authErrorMsg };
+  } catch(e: any) {
+    console.error("Save User Exception", e);
+    return { success: false, authError: e.message };
   }
 }
 
-/**
- * Deletes a user (Master access).
- */
+// Function ends here. Keep the rest of the file.
+
 export async function deleteUser(userId: string): Promise<boolean> {
   try {
     const currentList = await fetchAllUsers();
