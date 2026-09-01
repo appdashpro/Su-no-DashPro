@@ -301,7 +301,8 @@ export const storage = {
           try {
             const { error: editErr } = await supabase.from('lotes').update({
               data_alojamento: edit.alojamentoDate,
-              status: edit.status === 'Fechado' ? 'Encerrado' : 'Ativo'
+              status: edit.status === 'Fechado' ? 'Encerrado' : 'Ativo',
+              data_fechamento: edit.fechamentoDate || null
             }).eq('id', edit.id);
             if (editErr) {
               console.error('Erro ao sincronizar edicao de lote:', editErr);
@@ -459,11 +460,20 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
           name: integrado?.nome || (lote as any).nome_produtor || 'Desconhecido',
           alojamentoDate: lote.data_alojamento,
           status: lote.status === 'Encerrado' ? 'Fechado' : 'Em andamento',
-          fechamentoDate: localVersion?.fechamentoDate || undefined,
+          fechamentoDate: lote.data_fechamento || localVersion?.fechamentoDate || undefined,
           empresaId: lote.empresa_id,
           empresaName: empresa?.nome
         };
       });
+
+      
+      // Auto-migrate local fechamentoDate to Supabase
+      const toUpdate = mappedIntegrados.filter(i => i.status === 'Fechado' && i.fechamentoDate && !lotesDB?.find(l => l.id === i.id)?.data_fechamento);
+      if (toUpdate.length > 0) {
+          for (const l of toUpdate) {
+              supabase.from('lotes').update({ data_fechamento: l.fechamentoDate }).eq('id', l.id).then();
+          }
+      }
 
       // Ensure any lote_id referenced in visitasDB has a corresponding Integrado item
       visitasDB.forEach(v => {
@@ -786,7 +796,8 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
                 animais_alojados: finalAloj,
                peso_alojamento_kg: v.pesoAloj || 0,
                tipo_lote: v.tipoLote || 'Misto',
-               status: localLote.status === 'Fechado' ? 'Encerrado' : 'Ativo'
+               status: localLote.status === 'Fechado' ? 'Encerrado' : 'Ativo',
+               data_fechamento: localLote.fechamentoDate || null
            });
            if (errLote) console.error("Error upserting lote:", errLote);
        }
