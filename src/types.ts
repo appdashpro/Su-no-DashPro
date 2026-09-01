@@ -237,6 +237,7 @@ export interface VisitaDB {
   // Relacionamentos aninhados opcionais
   cargas?: CargaRacaoDB[];
   tratamentos?: TratamentoDB[];
+  entregas?: VisitaEntregaDB[];
   lote?: LoteDB;
 }
 
@@ -289,6 +290,39 @@ export interface Tratamento {
   pesoEstimadoKg?: number;
 }
 
+
+export interface CatalogoProduto {
+  id: string;
+  empresa_id: string;
+  nome: string;
+  categoria: 'Injetável' | 'Vacina' | 'Insumo' | 'Equipamento' | string;
+  unidade_medida: string;
+  preco_base: number;
+  ativo: boolean;
+}
+
+export interface VisitaEntregaDB {
+  id: string;
+  empresa_id: string;
+  visita_id: string;
+  produto_id: string;
+  quantidade: number;
+  valor_unitario_aplicado: number;
+  status_faturamento: 'Pendente' | 'Faturado';
+  created_at?: string;
+  // Join fields
+  produto_nome?: string;
+}
+
+export interface VisitaEntrega {
+  id: string;
+  produto_id: string;
+  produto_nome?: string;
+  quantidade: number;
+  valor_unitario_aplicado: number;
+  status_faturamento?: 'Pendente' | 'Faturado';
+}
+
 export interface Visit {
   id: string;
   date: string;
@@ -297,6 +331,7 @@ export interface Visit {
   recomendacao: string;
   avaliacao_tecnica?: AvaliacaoTecnica | null;
   tratamentos?: Tratamento[];
+  entregas?: VisitaEntrega[];
   consumoAcumuladoReal?: number;
   mortalidade?: number; // Historically used as percentage or absolute
   animaisAlojados?: number;

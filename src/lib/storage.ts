@@ -75,24 +75,25 @@ export const getEmpresaConfigsLocal = () => {
     const data = safeStorage.getItem(CONFIGS_KEY); 
     let parsed = data ? JSON.parse(data) : []; 
     
+    // Inject default curves to any config that is missing them
+    parsed.forEach((c: any) => {
+      if (!c.curva_desempenho || c.curva_desempenho.length === 0) {
+        c.curva_desempenho = defaultMugnolConfig.curva_desempenho;
+      } else {
+         const hasPadrao = c.curva_desempenho.find((curve: any) => curve.id === 'mugnol_padrao_2026');
+         if (!hasPadrao) {
+            c.curva_desempenho.push(defaultMugnolConfig.curva_desempenho[0]);
+         }
+      }
+      if (!c.programa_alimentar || c.programa_alimentar.length === 0) {
+        c.programa_alimentar = defaultMugnolConfig.programa_alimentar;
+      }
+    });
+
     // Ensure Mugnol config is always present if not explicitly saved
     const mugnolIndex = parsed.findIndex((c: any) => c.empresa_id === defaultMugnolConfig.empresa_id);
     if (mugnolIndex === -1) {
       parsed.push(defaultMugnolConfig);
-    } else {
-      // Always ensure we have the specific Mugnol curva and programa alimentar if they are empty
-      if (!parsed[mugnolIndex].curva_desempenho || parsed[mugnolIndex].curva_desempenho.length === 0) {
-        parsed[mugnolIndex].curva_desempenho = defaultMugnolConfig.curva_desempenho;
-      } else {
-         const hasPadrao = parsed[mugnolIndex].curva_desempenho.find((c: any) => c.id === 'mugnol_padrao_2026');
-         if (!hasPadrao) {
-            parsed[mugnolIndex].curva_desempenho.push(defaultMugnolConfig.curva_desempenho[0]);
-         }
-      }
-      
-      if (!parsed[mugnolIndex].programa_alimentar || parsed[mugnolIndex].programa_alimentar.length === 0) {
-        parsed[mugnolIndex].programa_alimentar = defaultMugnolConfig.programa_alimentar;
-      }
     }
     
     return parsed; 
@@ -300,7 +301,7 @@ export const storage = {
           try {
             const { error: editErr } = await supabase.from('lotes').update({
               data_alojamento: edit.alojamentoDate,
-              status: edit.status === 'Em andamento' ? 'Ativo' : 'Encerrado'
+              status: edit.status === 'Fechado' ? 'Encerrado' : 'Ativo'
             }).eq('id', edit.id);
             if (editErr) {
               console.error('Erro ao sincronizar edicao de lote:', editErr);
@@ -333,6 +334,8 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
               const vIds = vList.map(v => v.id);
               await supabase.from('cargas_racao').delete().in('visita_id', vIds);
               await supabase.from('tratamentos').delete().in('visita_id', vIds);
+              await supabase.from('visita_entregas').delete().in('visita_id', vIds);
+        await supabase.from('visita_entregas').delete().in('visita_id', vIds);
               await supabase.from('visitas').delete().eq('lote_id', id);
             }
             await supabase.from('cargas_racao').delete().eq('lote_id', id);
@@ -361,6 +364,8 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
             const { error: err1 } = await supabase.from('cargas_racao').delete().eq('visita_id', id);
             if (err1) throw err1;
             const { error: err2 } = await supabase.from('tratamentos').delete().eq('visita_id', id);
+            await supabase.from('visita_entregas').delete().eq('visita_id', id);
+      await supabase.from('visita_entregas').delete().eq('visita_id', id);
             if (err2) throw err2;
             const { error: err3 } = await supabase.from('visitas').delete().eq('id', id);
             if (err3) throw err3;
@@ -419,9 +424,10 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
       let visitasDB: any[] = [];
       let cargasDB: any[] = [];
       let tratamentosDB: any[] = [];
+      let entregasDB: any[] = [];
 
       try {
-        const { data: vData, error: vErr } = await supabase.from('visitas').select('*, cargas_racao(*), tratamentos(*)').range(0, 9999);
+        const { data: vData, error: vErr } = await supabase.from('visitas').select('*, cargas_racao!fk_carg_visita(*), tratamentos!fk_trat_visita(*)').range(0, 9999);
         if (vErr || !vData) {
           const { data: fallbackV } = await supabase.from('visitas').select('*').range(0, 9999);
           visitasDB = fallbackV || [];
@@ -429,6 +435,7 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
           cargasDB = cData || [];
           const { data: tData } = await supabase.from('tratamentos').select('*').range(0, 9999);
           tratamentosDB = tData || [];
+        
         } else {
           visitasDB = vData;
         }
@@ -451,7 +458,7 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
           id: lote.id, 
           name: integrado?.nome || (lote as any).nome_produtor || 'Desconhecido',
           alojamentoDate: lote.data_alojamento,
-          status: lote.status === 'Ativo' ? 'Em andamento' : 'Fechado',
+          status: lote.status === 'Encerrado' ? 'Fechado' : 'Em andamento',
           fechamentoDate: localVersion?.fechamentoDate || undefined,
           empresaId: lote.empresa_id,
           empresaName: empresa?.nome
@@ -482,6 +489,8 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
           ? v.cargas_racao 
           : cargasDB.filter((c: any) => c.visita_id === v.id || c.lote_id === v.lote_id);
 
+        const vEntregas = (v.visita_entregas && v.visita_entregas.length > 0) ? v.visita_entregas : entregasDB.filter((e: any) => e.visita_id === v.id);
+
         const vTratamentos = (v.tratamentos && v.tratamentos.length > 0)
           ? v.tratamentos
           : tratamentosDB.filter((t: any) => t.visita_id === v.id || t.lote_id === v.lote_id);
@@ -508,7 +517,7 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
 
         const activeCurveInfo = getActiveCurve(
           lote?.data_alojamento,
-          lote?.status === 'Ativo' ? 'Em andamento' : 'Fechado',
+          lote?.status === 'Encerrado' ? 'Fechado' : 'Em andamento',
           lote?.tipo_lote as any, lote?.data_abate || null, null, v.curva_consumo_id, v.data_visita
         );
         const metas = activeCurveInfo.metas;
@@ -560,6 +569,14 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
           consumoTerminacao2: (cargaTerm2 > 0 && vivos > 0) ? Number((cargaTerm2 / vivos).toFixed(2)) : undefined,
           metaTerminacao2: metas.metaTerminacao2,
           metaAcumulada: metas.metaAcumulada,
+          entregas: vEntregas.map((e: any) => ({
+            id: e.id,
+            produto_id: e.produto_id,
+            produto_nome: e.produto_nome || e.catalogo_produtos?.nome || '',
+            quantidade: e.quantidade,
+            valor_unitario_aplicado: e.valor_unitario_aplicado,
+            status_faturamento: e.status_faturamento
+          })),
           tratamentos: vTratamentos.map((t: any) => {
             const tPeso = (t.peso_estimado_kg != null && Number(t.peso_estimado_kg) > 0)
               ? Number(t.peso_estimado_kg)
@@ -769,7 +786,7 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
                 animais_alojados: finalAloj,
                peso_alojamento_kg: v.pesoAloj || 0,
                tipo_lote: v.tipoLote || 'Misto',
-               status: localLote.status === 'Em andamento' ? 'Ativo' : 'Encerrado'
+               status: localLote.status === 'Fechado' ? 'Encerrado' : 'Ativo'
            });
            if (errLote) console.error("Error upserting lote:", errLote);
        }
@@ -906,7 +923,26 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
        }
 
        await supabase.from('tratamentos').delete().eq('visita_id', v.id);
+       await supabase.from('visita_entregas').delete().eq('visita_id', v.id);
        
+       if (v.entregas && v.entregas.length > 0) {
+         const entregasToInsert = v.entregas.map(e => ({
+            id: (e.id && e.id.length === 36 && e.id.includes("-")) ? e.id : generateUUID(),
+            empresa_id: finalEmpresaId,
+            visita_id: v.id,
+            produto_id: e.produto_id,
+            quantidade: e.quantidade,
+            valor_unitario_aplicado: e.valor_unitario_aplicado,
+            status_faturamento: e.status_faturamento || 'Pendente'
+         }));
+         const { error: errEntregas } = await supabase.from('visita_entregas').insert(entregasToInsert);
+         if (errEntregas) {
+             console.error("Erro insert entregas:", errEntregas); addSyncLog("Erro insert entregas: " + v.id, errEntregas);
+             addVisitsToOfflineQueue([v]);
+             continue;
+         }
+       }
+
        if (v.tratamentos && v.tratamentos.length > 0) {
          const tratamentosToInsert = v.tratamentos.map(t => ({
             id: (t.id && t.id.length === 36 && t.id.includes("-")) ? t.id : generateUUID(),

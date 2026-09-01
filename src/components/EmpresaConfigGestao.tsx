@@ -1,3 +1,5 @@
+import { Package } from 'lucide-react';
+import { CatalogoGestao } from './CatalogoGestao';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Empresa, EmpresaConfig, UserProfile, CurveConfig } from '../types';
@@ -26,6 +28,7 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
   const [causas, setCausas] = useState<string[]>([]);
   const [tecnicos, setTecnicos] = useState<string[]>([]);
   const [newTecnico, setNewTecnico] = useState('');
+  const [activeTab, setActiveTab] = useState<'geral' | 'catalogo'>('geral');
 
   const [newMedicamento, setNewMedicamento] = useState('');
   const [newCausa, setNewCausa] = useState('');
@@ -242,7 +245,27 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-100">
+        
+        <div className="flex border-b border-slate-200">
+          <button
+            onClick={() => setActiveTab('geral')}
+            className={`px-6 py-3 text-sm font-medium border-b-2 ${activeTab === 'geral' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+          >
+            Configurações Gerais
+          </button>
+          <button
+            onClick={() => setActiveTab('catalogo')}
+            className={`px-6 py-3 text-sm font-medium border-b-2 flex items-center gap-2 ${activeTab === 'catalogo' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+          >
+            <Package className="w-4 h-4" />
+            Catálogo de Insumos/Medicamentos
+          </button>
+        </div>
+        
+        <div className="p-6">
+
+          {activeTab === 'geral' && (<>
+          <div className="mb-6 pb-6 border-b border-slate-100">
           <div className="flex justify-between items-center mb-2">
             <label className="block text-sm font-semibold text-slate-700">Selecione o Cliente</label>
             {selectedEmpresaId && (
@@ -488,6 +511,10 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
             </div>
           </div>
         )}
+        </>)}
+        {activeTab === 'catalogo' && selectedEmpresaId && <CatalogoGestao empresaId={selectedEmpresaId} />}
+        {activeTab === 'catalogo' && !selectedEmpresaId && <div className="text-slate-500 text-center py-8">Selecione o cliente na aba Geral para configurar o catálogo.</div>}
+      </div>
       </div>
     </div>
   );

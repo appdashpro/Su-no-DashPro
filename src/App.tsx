@@ -4,6 +4,7 @@ import { Tutorial } from './components/Tutorial';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Prioridades } from './components/Prioridades';
+import { FaturamentoGestao } from './components/FaturamentoGestao';
 import { Dashboard } from './components/Dashboard';
 import { VisitaForm } from './components/VisitForm';
 import { VisitsList } from './components/Visits';

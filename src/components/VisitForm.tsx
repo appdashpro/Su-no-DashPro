@@ -7,6 +7,7 @@ import { growthCurve, growthCurveFemea, getExpectedConsumption, getExpectedWeigh
 import { Info } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { TratamentosFormSection } from './TratamentosFormSection';
+import { EntregasFormSection } from './EntregasFormSection';
 import { AvaliacaoTecnicaSection } from './AvaliacaoTecnicaSection';
 import { generateUUID } from '../utils/uuid';
 
@@ -257,34 +258,49 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  newData.mortalidade = undefined;
  }
  
- if (vivos > 0) {
- if (newData.cargaAlojamento) newData.consumoAlojamento = Number((Number(newData.cargaAlojamento) / vivos).toFixed(2));
- if (newData.cargaCrescimento1) newData.consumoCrescimento1 = Number((Number(newData.cargaCrescimento1) / vivos).toFixed(2));
- if (newData.cargaCrescimento2) newData.consumoCrescimento2 = Number((Number(newData.cargaCrescimento2) / vivos).toFixed(2));
- if (newData.cargaCrescimento3) newData.consumoCrescimento3 = Number((Number(newData.cargaCrescimento3) / vivos).toFixed(2));
- if (newData.cargaTerminacao1) newData.consumoTerminacao1 = Number((Number(newData.cargaTerminacao1) / vivos).toFixed(2));
- if (newData.cargaTerminacao2) newData.consumoTerminacao2 = Number((Number(newData.cargaTerminacao2) / vivos).toFixed(2));
- 
- // volumeTotalCargas is always the sum of all specific cargas
- const sumCargas = (Number(newData.cargaAlojamento) || 0) + (Number(newData.cargaCrescimento1) || 0) + (Number(newData.cargaCrescimento2) || 0) + (Number(newData.cargaCrescimento3) || 0) + (Number(newData.cargaTerminacao1) || 0) + (Number(newData.cargaTerminacao2) || 0);
- 
- 
-  if (name.startsWith('carga')) {
-    newData.volumeTotalCargas = sumCargas > 0 ? sumCargas : undefined;
- }
+ if (['carga', 'animaisAlojados', 'animaisMortos', 'descartesPeriodo'].some(k => name.startsWith(k))) {
+    if (vivos > 0) {
+        if (newData.cargaAlojamento) newData.consumoAlojamento = Number((Number(newData.cargaAlojamento) / vivos).toFixed(2));
+        else if (name === 'cargaAlojamento') newData.consumoAlojamento = undefined;
 
- const currentVolumeTotal = Number(newData.volumeTotalCargas) || sumCargas;
- 
- if (name.startsWith('carga') || name === 'volumeTotalCargas' || name === 'animaisAlojados' || name === 'animaisMortos' || name === 'descartesPeriodo') {
+        if (newData.cargaCrescimento1) newData.consumoCrescimento1 = Number((Number(newData.cargaCrescimento1) / vivos).toFixed(2));
+        else if (name === 'cargaCrescimento1') newData.consumoCrescimento1 = undefined;
+
+        if (newData.cargaCrescimento2) newData.consumoCrescimento2 = Number((Number(newData.cargaCrescimento2) / vivos).toFixed(2));
+        else if (name === 'cargaCrescimento2') newData.consumoCrescimento2 = undefined;
+
+        if (newData.cargaCrescimento3) newData.consumoCrescimento3 = Number((Number(newData.cargaCrescimento3) / vivos).toFixed(2));
+        else if (name === 'cargaCrescimento3') newData.consumoCrescimento3 = undefined;
+
+        if (newData.cargaTerminacao1) newData.consumoTerminacao1 = Number((Number(newData.cargaTerminacao1) / vivos).toFixed(2));
+        else if (name === 'cargaTerminacao1') newData.consumoTerminacao1 = undefined;
+
+        if (newData.cargaTerminacao2) newData.consumoTerminacao2 = Number((Number(newData.cargaTerminacao2) / vivos).toFixed(2));
+        else if (name === 'cargaTerminacao2') newData.consumoTerminacao2 = undefined;
+    }
+}
+
+const sumCargas = (Number(newData.cargaAlojamento) || 0) +
+                  (Number(newData.cargaCrescimento1) || 0) +
+                  (Number(newData.cargaCrescimento2) || 0) +
+                  (Number(newData.cargaCrescimento3) || 0) +
+                  (Number(newData.cargaTerminacao1) || 0) +
+                  (Number(newData.cargaTerminacao2) || 0);
+
+if (name.startsWith('carga')) {
+    newData.volumeTotalCargas = sumCargas > 0 ? sumCargas : undefined;
+}
+
+const currentVolumeTotal = Number(newData.volumeTotalCargas) || sumCargas;
+
+if (['carga', 'volumeTotalCargas', 'animaisAlojados', 'animaisMortos', 'descartesPeriodo'].some(k => name.startsWith(k))) {
     if (currentVolumeTotal > 0 && vivos > 0) {
         newData.consumoAcumuladoReal = Number((currentVolumeTotal / vivos).toFixed(2));
-    } else if (name.startsWith('carga')) {
+    } else {
         newData.consumoAcumuladoReal = undefined;
     }
- }
- }
-
- if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') && newData.date && newData.alojamentoDate) {
+}
+if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') && newData.date && newData.alojamentoDate) {
  const [vY, vM, vD] = newData.date.split('-');
  const [aY, aM, aD] = newData.alojamentoDate.split('-');
  const visitDate = new Date(Number(vY), Number(vM) - 1, Number(vD));
@@ -696,7 +712,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  <input type="number" step="0.01" name="volumeTotalCargas" value={formData.volumeTotalCargas ?? ''} onChange={handleChange} className="w-full border border-slate-300 rounded p-1.5 text-xs md:text-sm font-bold bg-white focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00" />
  </td>
  <td className="py-3 pr-2 md:pr-4">
- <input type="number" step="0.01" name="consumoAcumuladoReal" value={formData.consumoAcumuladoReal ?? ''} onChange={handleChange} className={`w-full border border-slate-300 rounded p-1.5 text-xs md:text-sm font-bold bg-white focus:ring-2 focus:ring-blue-500 outline-none ${currentDiffKg !== null && Math.abs(currentDiffKg) <= 5 ? 'text-blue-600' : currentDiffKg !== null && currentDiffKg > 5 ? 'text-red-600' : currentDiffKg !== null && currentDiffKg < -5 ? 'text-emerald-600' : 'text-slate-700'}`} placeholder="0.00" />
+ <input type="number" step="0.01" name="consumoAcumuladoReal" value={formData.consumoAcumuladoReal ?? ''} readOnly className={`w-full border border-slate-200 rounded p-1.5 text-xs md:text-sm font-bold bg-slate-50 focus:outline-none cursor-not-allowed ${currentDiffKg !== null && Math.abs(currentDiffKg) <= 5 ? 'text-blue-600' : currentDiffKg !== null && currentDiffKg > 5 ? 'text-red-600' : currentDiffKg !== null && currentDiffKg < -5 ? 'text-emerald-600' : 'text-slate-700'}`} placeholder="0.00" />
  </td>
  <td className="py-3 pr-2 md:pr-4 text-slate-500 text-xs md:text-sm">
  {formData.metaAcumulada || '-'}
