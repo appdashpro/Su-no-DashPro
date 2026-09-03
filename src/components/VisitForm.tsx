@@ -576,6 +576,7 @@ if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') &
  <option value="Automático">Automático</option>
  <option value="Linear com água">Linear com água</option>
  <option value="Automático com água">Automático com água</option>
+ <option value="Misto">Misto</option>
  </select>
  </div>
  
