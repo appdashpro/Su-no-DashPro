@@ -23,6 +23,7 @@ interface EnrichedTreatment {
   duracaoDias: number;
   
   animaisTratados: number;
+  custoTotal: number;
   pesoEstimadoKg: number;
   mgTotalTratamento: number;
   produtoConsumidoKg: number;
@@ -35,6 +36,7 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
   const configs = getEmpresaConfigsLocal();
   const [searchTerm, setSearchTerm] = useState('');
   const [period, setPeriod] = useState('6m');
+  const [viewMode, setViewMode] = useState<'kg' | 'custo'>('kg');
 
   const allTreatmentData = useMemo(() => {
     const data: EnrichedTreatment[] = [];
@@ -47,7 +49,7 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
 
       let basePesoEstimadoKg = visit.pesoAmostradoKg || 0;
       if (basePesoEstimadoKg <= 0) {
-        const currentConfig = configs.find(c => c.empresa_id === integrado.empresaId);
+        const currentConfig = configs.find((c: any) => c.empresa_id === integrado.empresaId);
         const { curve } = getActiveCurve(integrado.alojamentoDate || visit.date, 'Em andamento', visit.tipoLote || 'Misto', undefined, currentConfig, visit.curva_consumo_id, visit.date);
         const expectedPoint = curve.find((p: GrowthCurvePoint) => p.dia >= (visit.idade || 0));
         basePesoEstimadoKg = expectedPoint ? expectedPoint.pesoInicial : 0;
@@ -92,6 +94,7 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
           pesoEstimadoKg,
           mgTotalTratamento,
           produtoConsumidoKg,
+          custoTotal: t.custoTotal || 0,
           loteId: visit.integradoId,
           integradoNome: integrado.name
         });
@@ -199,16 +202,16 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
   ];
 
   // Aggregations
-  const totalKg = periodFilteredData.reduce((acc, t) => acc + t.produtoConsumidoKg, 0);
+  const totalKg = periodFilteredData.reduce((acc, t) => acc + (viewMode === 'custo' ? t.custoTotal : t.produtoConsumidoKg), 0);
 
   const byProduct = periodFilteredData.reduce((acc, t) => {
-    acc[t.produto] = (acc[t.produto] || 0) + t.produtoConsumidoKg;
+    acc[t.produto] = (acc[t.produto] || 0) + (viewMode === 'custo' ? t.custoTotal : t.produtoConsumidoKg);
     return acc;
   }, {} as Record<string, number>);
   const sortedProducts = Object.entries(byProduct).sort((a, b) => b[1] - a[1]);
 
   const byMotivo = periodFilteredData.reduce((acc, t) => {
-    acc[t.motivo] = (acc[t.motivo] || 0) + t.produtoConsumidoKg;
+    acc[t.motivo] = (acc[t.motivo] || 0) + (viewMode === 'custo' ? t.custoTotal : t.produtoConsumidoKg);
     return acc;
   }, {} as Record<string, number>);
   const sortedMotivos = Object.entries(byMotivo).sort((a, b) => b[1] - a[1]);
@@ -217,7 +220,7 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
     if (!acc[t.integradoNome]) {
       acc[t.integradoNome] = { kg: 0, animais: t.animaisTratados };
     }
-    acc[t.integradoNome].kg += t.produtoConsumidoKg;
+    acc[t.integradoNome].kg += (viewMode === 'custo' ? t.custoTotal : t.produtoConsumidoKg);
     if (t.animaisTratados > acc[t.integradoNome].animais) {
       acc[t.integradoNome].animais = t.animaisTratados;
     }
@@ -275,6 +278,20 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
         
         
         <div className="flex items-center gap-2">
+          <div className="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200">
+            <button
+              onClick={() => setViewMode('kg')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${viewMode === 'kg' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Volume (Kg)
+            </button>
+            <button
+              onClick={() => setViewMode('custo')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${viewMode === 'custo' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Custo (R$)
+            </button>
+          </div>
           <button
             onClick={handleExport}
             className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
@@ -305,7 +322,7 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-center">
           <div className="text-sm text-slate-500 mb-1">Total Consumido no Período</div>
           <div className="text-3xl font-black text-slate-800">
-            {totalKg.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} <span className="text-base font-medium text-slate-500">kg</span>
+            {viewMode === 'custo' ? 'R$ ' : ''}{totalKg.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} <span className="text-base font-medium text-slate-500">{viewMode === 'custo' ? '' : 'kg'}</span>
           </div>
         </div>
         
@@ -315,7 +332,7 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
             {sortedProducts[0] ? sortedProducts[0][0] : 'Nenhum'}
           </div>
           <div className="text-sm font-medium text-indigo-600">
-            {sortedProducts[0] ? sortedProducts[0][1].toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' kg' : '-'}
+            {sortedProducts[0] ? (viewMode === 'custo' ? 'R$ ' : '') + sortedProducts[0][1].toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + (viewMode === 'custo' ? '' : ' kg') : '-'}
           </div>
         </div>
 
@@ -325,7 +342,7 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
             {sortedMotivos[0] ? sortedMotivos[0][0] : 'Nenhum'}
           </div>
           <div className="text-sm font-medium text-rose-600">
-            {sortedMotivos[0] ? sortedMotivos[0][1].toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' kg' : '-'}
+            {sortedMotivos[0] ? (viewMode === 'custo' ? 'R$ ' : '') + sortedMotivos[0][1].toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + (viewMode === 'custo' ? '' : ' kg') : '-'}
           </div>
         </div>
       </div>
@@ -381,7 +398,7 @@ export function MedicationAnalysis({ visits, integrados }: Props) {
               <div key={motivo}>
                 <div className="flex justify-between text-sm mb-1">
                   <span className="font-medium text-slate-700">{motivo}</span>
-                  <span className="font-bold text-slate-900">{kg.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg</span>
+                  <span className="font-bold text-slate-900">{viewMode === 'custo' ? 'R$ ' : ''}{kg.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}{viewMode === 'custo' ? '' : ' kg'}</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2">
                   <div 

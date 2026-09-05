@@ -968,6 +968,7 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
             carencia_dias: t.carenciaDias || null,
             motivo: t.motivo || null,
             concentracao: t.concentracao || null,
+            custo_total: t.custoTotal || null,
             peso_estimado_kg: (t.pesoEstimadoKg && Number(t.pesoEstimadoKg) > 0)
               ? Number(t.pesoEstimadoKg)
               : (v.pesoAmostradoKg && Number(v.pesoAmostradoKg) > 0)

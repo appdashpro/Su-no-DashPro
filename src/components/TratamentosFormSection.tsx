@@ -116,7 +116,18 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
     if (tratamentos.length > 0) {
       const updated = tratamentos.map(t => {
         if (!t.doseMgKg) return { ...t, pesoEstimadoKg: newWeight };
+        
         let mgPorDia = t.doseMgKg * calcWeight * animaisVivos;
+        let custoPorKgProduto = 0;
+        
+        const medPermitidos = activeMedicamentos;
+        if (t.produto && medPermitidos) {
+          const foundMed = medPermitidos.find((m: any) => (typeof m === 'string' ? m : m.nome) === t.produto);
+          if (foundMed && typeof foundMed !== 'string' && foundMed.custoPorKg) {
+            custoPorKgProduto = foundMed.custoPorKg;
+          }
+        }
+
         let produtoPorDia = mgPorDia;
         if (t.concentracao && t.concentracao > 0) {
           produtoPorDia = mgPorDia / (t.concentracao / 100);
@@ -172,7 +183,20 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
     if (t.doseMgKg && effectiveWeight && animaisVivos) {
       // Dose is mg per kg of body weight.
       // Total mg per day = dose * weight * animals
+      
+      // Dose is mg per kg of body weight.
+      // Total mg per day = dose * weight * animals
       let mgPorDia = t.doseMgKg * effectiveWeight * animaisVivos;
+      let custoPorKgProduto = 0;
+      
+      const medPermitidos = activeMedicamentos;
+      if (t.produto && medPermitidos) {
+        const foundMed = medPermitidos.find((m: any) => (typeof m === 'string' ? m : m.nome) === t.produto);
+        if (foundMed && typeof foundMed !== 'string' && foundMed.custoPorKg) {
+          custoPorKgProduto = foundMed.custoPorKg;
+        }
+      }
+
       
       // If concentration is provided (e.g. mg/ml or g/100g -> mg/g), we can adjust, but usually concentration is % or mg/g
       let produtoPorDia = mgPorDia;
@@ -185,9 +209,11 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
       
       newTratamentos[index].quantidadePorDia = Number(gramasPorDia.toFixed(2));
       if (t.duracaoDias) {
-        newTratamentos[index].quantidadeTotal = Number((gramasPorDia * t.duracaoDias).toFixed(2));
+        newTratamentos[index].quantidadeTotal = Number((gramasPorDia * t.duracaoDias / 1000).toFixed(4));
+        newTratamentos[index].custoTotal = Number(((gramasPorDia * t.duracaoDias / 1000) * custoPorKgProduto).toFixed(2));
       } else {
         newTratamentos[index].quantidadeTotal = 0;
+        newTratamentos[index].custoTotal = 0;
       }
     }
     
@@ -208,7 +234,7 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
             ? String(savedTreatmentWeight)
             : (pesoEstimadoCurve > 0 ? pesoEstimadoCurve.toFixed(2) : '')));
 
-  const activeMedicamentos = (medicamentosPermitidos && medicamentosPermitidos.length > 0) 
+  const activeMedicamentos: any[] = (medicamentosPermitidos && medicamentosPermitidos.length > 0) 
     ? medicamentosPermitidos 
     : DEFAULT_MEDICAMENTOS_PERMITIDOS;
 
@@ -271,10 +297,11 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
                     className="w-full border border-slate-200 rounded p-1.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
                   >
                     <option value="">Selecione o Princípio Ativo...</option>
-                    {activeMedicamentos.map(m => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                    {tratamento.produto && !activeMedicamentos.includes(tratamento.produto) && (
+                    {activeMedicamentos.map(m => {
+                      const name = typeof m === 'string' ? m : m.nome;
+                      return <option key={name} value={name}>{name}</option>;
+                    })}
+                    {tratamento.produto && !activeMedicamentos.some(m => (typeof m === 'string' ? m : m.nome) === tratamento.produto) && (
                       <option value={tratamento.produto}>{tratamento.produto} (Outro)</option>
                     )}
                   </select>
@@ -340,13 +367,19 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
               {tratamento.doseMgKg > 0 && tratamento.duracaoDias > 0 && (
                 <div className="bg-blue-50 border border-blue-100 p-2 rounded text-xs text-blue-800 flex justify-between">
                   <div>
-                    <span className="block text-blue-600/70">Quantidade (g/dia):</span>
-                    <span className="font-semibold text-sm">{tratamento.quantidadePorDia} g</span>
+                    <span className="block text-blue-600/70">Quantidade (kg/dia):</span>
+                    <span className="font-semibold text-sm">{tratamento.quantidadePorDia} kg</span>
                   </div>
                   <div className="text-right">
                     <span className="block text-blue-600/70">Total Tratamento:</span>
-                    <span className="font-semibold text-sm">{tratamento.quantidadeTotal} g</span>
+                    <span className="font-semibold text-sm">{tratamento.quantidadeTotal} kg</span>
                   </div>
+                  {tratamento.custoTotal > 0 && (
+                  <div>
+                    <span className="block text-blue-600/70">Custo Total:</span>
+                    <span className="font-semibold text-sm">R$ {tratamento.custoTotal}</span>
+                  </div>
+                  )}
                 </div>
               )}
             </div>

@@ -611,7 +611,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                                       const concentracao = t.concentracao && t.concentracao > 0 ? t.concentracao : 100;
                                       const mgTotal = animaisTratados * pesoEstimadoKg * (t.doseMgKg || 0) * (t.duracaoDias || 1);
                                       const produtoConsumidoKg = (mgTotal / 1000000) / (concentracao / 100);
-                                      qtTotal = Number((produtoConsumidoKg * 1000).toFixed(2));
+                                      qtTotal = Number((produtoConsumidoKg).toFixed(4));
                                   }
                                   
                                   return (
@@ -630,7 +630,7 @@ export function IntegradoDetailsModal({ integradoId, visits, integrados, onClose
                                     </span>
                                     {qtTotal && qtTotal > 0 && (
                                       <span className="bg-blue-100 border border-blue-200 text-blue-800 px-2 py-1 rounded font-bold shadow-sm">
-                                        Total: {qtTotal} g
+                                        Total: {qtTotal} kg
                                       </span>
                                     )}
                                   </div>

@@ -27,13 +27,18 @@ export interface CurveConfig {
   programa_alimentar?: any[];
 }
 
+export interface MedicamentoConfig {
+  nome: string;
+  custoPorKg?: number;
+}
+
 export interface EmpresaConfig {
   empresa_id: string;
   tipo_calculo_curva: 'DIA_UM' | 'PESO_ALOJAMENTO';
   meta_mortalidade: number;
   curva_desempenho?: any[]; // Now can hold CurveConfig[] or legacy flat array
   programa_alimentar: any[];
-  medicamentos_permitidos: string[];
+  medicamentos_permitidos: (string | MedicamentoConfig)[];
   causas_mortalidade: string[];
   tecnicos?: string[];
   created_at?: string;
@@ -286,6 +291,7 @@ export interface Tratamento {
   concentracao?: number;
   quantidadePorDia?: number;
   quantidadeTotal?: number;
+  custoTotal?: number;
   carenciaDias?: number;
   pesoEstimadoKg?: number;
 }

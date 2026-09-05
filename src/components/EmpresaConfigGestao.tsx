@@ -1,9 +1,9 @@
 import { Package } from 'lucide-react';
-import { CatalogoGestao } from './CatalogoGestao';
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Empresa, EmpresaConfig, UserProfile, CurveConfig } from '../types';
-import { Save, AlertCircle, Plus, Trash2, Settings, X, RotateCcw, Check } from 'lucide-react';
+import { Save, AlertCircle, Plus, Trash2, Settings, X, RotateCcw, Check, Edit2 } from 'lucide-react';
 import { DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE, DEFAULT_TECNICOS, growthCurvesMisto, growthCurveFemea, defaultMetas, defaultMetasFemea } from '../data';
 import { getEmpresaConfigsLocal } from '../lib/storage';
 
@@ -24,14 +24,16 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
   // Local state for simple fields
   const [tipoCalculo, setTipoCalculo] = useState<'DIA_UM' | 'PESO_ALOJAMENTO'>('DIA_UM');
   const [metaMortalidade, setMetaMortalidade] = useState<number>(0);
-  const [medicamentos, setMedicamentos] = useState<string[]>([]);
+  const [medicamentos, setMedicamentos] = useState<any[]>([]);
   const [causas, setCausas] = useState<string[]>([]);
   const [tecnicos, setTecnicos] = useState<string[]>([]);
   const [newTecnico, setNewTecnico] = useState('');
-  const [activeTab, setActiveTab] = useState<'geral' | 'catalogo'>('geral');
+  
 
   const [newMedicamento, setNewMedicamento] = useState('');
+  const [editingMedicamento, setEditingMedicamento] = useState<{nome: string, custoPorKg: string} | null>(null);
   const [newCausa, setNewCausa] = useState('');
+  const [editingCausa, setEditingCausa] = useState<{old: string, new: string} | null>(null);
       
   useEffect(() => {
     if (empresas && empresas.length > 0) {
@@ -63,7 +65,7 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
     const baseCausas = (config?.causas_mortalidade && config.causas_mortalidade.length > 0) ? config.causas_mortalidade : DEFAULT_CAUSAS_MORTALIDADE;
     const baseTecnicos = (config?.tecnicos !== undefined && config.tecnicos !== null) ? config.tecnicos : (isPastre ? DEFAULT_TECNICOS : []);
 
-    const arraysEqual = (a, b) => {
+    const arraysEqual = (a: any[], b: any[]) => {
       if (a.length !== b.length) return false;
       const sortedA = [...a].sort();
       const sortedB = [...b].sort();
@@ -196,15 +198,18 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
     }
   };
 
+  const [newMedicamentoCusto, setNewMedicamentoCusto] = useState('');
+
   const addMedicamento = () => {
-    if (newMedicamento.trim() && !medicamentos.includes(newMedicamento.trim())) {
-      setMedicamentos([...medicamentos, newMedicamento.trim()]);
+    if (newMedicamento.trim() && !medicamentos.find(m => (typeof m === 'string' ? m : m.nome) === newMedicamento.trim())) {
+      setMedicamentos([...medicamentos, { nome: newMedicamento.trim(), custoPorKg: newMedicamentoCusto ? parseFloat(newMedicamentoCusto) : undefined }]);
       setNewMedicamento('');
+      setNewMedicamentoCusto('');
     }
   };
 
   const removeMedicamento = (med: string) => {
-    setMedicamentos(medicamentos.filter(m => m !== med));
+    setMedicamentos(medicamentos.filter(m => (typeof m === 'string' ? m : m.nome) !== med));
   };
 
   const addCausa = () => {
@@ -246,25 +251,11 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         
-        <div className="flex border-b border-slate-200">
-          <button
-            onClick={() => setActiveTab('geral')}
-            className={`px-6 py-3 text-sm font-medium border-b-2 ${activeTab === 'geral' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
-          >
-            Configurações Gerais
-          </button>
-          <button
-            onClick={() => setActiveTab('catalogo')}
-            className={`px-6 py-3 text-sm font-medium border-b-2 flex items-center gap-2 ${activeTab === 'catalogo' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
-          >
-            <Package className="w-4 h-4" />
-            Catálogo de Insumos/Medicamentos
-          </button>
-        </div>
+        
         
         <div className="p-6">
 
-          {activeTab === 'geral' && (<>
+          
           <div className="mb-6 pb-6 border-b border-slate-100">
           <div className="flex justify-between items-center mb-2">
             <label className="block text-sm font-semibold text-slate-700">Selecione o Cliente</label>
@@ -373,7 +364,17 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
                       onChange={(e) => setNewMedicamento(e.target.value)}
                       disabled={!isMaster}
                       onKeyDown={(e) => e.key === 'Enter' && addMedicamento()}
-                      placeholder="Nome do princípio ativo / medicamento"
+                      placeholder="Nome do medicamento"
+                      className="flex-[2] px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={newMedicamentoCusto}
+                      onChange={(e) => setNewMedicamentoCusto(e.target.value)}
+                      disabled={!isMaster}
+                      onKeyDown={(e) => e.key === 'Enter' && addMedicamento()}
+                      placeholder="Custo/Kg (R$)"
                       className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                     />
                     <button
@@ -383,15 +384,69 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
                       <Plus className="w-5 h-5" />
                     </button>
                   </div>
-                  <div className="flex flex-wrap gap-2 max-h-60 overflow-y-auto p-2 bg-white rounded-lg border border-slate-200">
-                    {medicamentos.map(med => (
-                      <span key={med} className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-50 text-emerald-800 rounded-full text-xs font-medium border border-emerald-200 shadow-sm">
-                        {med}
-                        {isMaster && (<button onClick={() => removeMedicamento(med)} className="hover:text-red-500 ml-1 text-slate-400">
-                          <X className="w-3 h-3" />
-                        </button>)}
-                      </span>
-                    ))}
+                  <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto p-2 bg-white rounded-lg border border-slate-200">
+                    {medicamentos.map((med, idx) => {
+                      const nome = typeof med === 'string' ? med : med.nome;
+                      const custo = typeof med === 'string' ? undefined : med.custoPorKg;
+                      const isEditing = editingMedicamento?.nome === nome;
+
+                      if (isEditing) {
+                        return (
+                          <div key={nome + idx} className="flex items-center gap-2 bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                            <span className="text-sm font-semibold text-emerald-800 w-1/3 truncate" title={nome}>{nome}</span>
+                            <input
+                              type="number"
+                              value={editingMedicamento?.custoPorKg || ''}
+                              onChange={e => editingMedicamento && setEditingMedicamento({...editingMedicamento, custoPorKg: e.target.value})}
+                              placeholder="Novo Custo (R$)"
+                              className="flex-1 px-2 py-1 text-sm border border-emerald-300 rounded outline-none focus:ring-1 focus:ring-emerald-500"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => {
+                                const newMeds = [...medicamentos];
+                                const targetIdx = newMeds.findIndex(m => (typeof m === 'string' ? m : m.nome) === nome);
+                                if (targetIdx !== -1) {
+                                  newMeds[targetIdx] = { nome, custoPorKg: parseFloat(editingMedicamento?.custoPorKg || '0') || 0 };
+                                  setMedicamentos(newMeds);
+                                }
+                                setEditingMedicamento(null);
+                              }}
+                              className="p-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 shadow-sm"
+                              title="Salvar"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setEditingMedicamento(null)} className="p-1.5 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 shadow-sm" title="Cancelar">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      return (
+                      <div key={nome + idx} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 hover:border-emerald-300 transition-colors group">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-700">{nome}</span>
+                          {custo !== undefined ? (
+                            <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200 shadow-sm">R$ {custo.toFixed(2)} / kg</span>
+                          ) : (
+                            <span className="text-xs text-slate-400 italic">Sem custo definido</span>
+                          )}
+                        </div>
+                        {isMaster && (
+                          <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity gap-1">
+                            <button onClick={() => setEditingMedicamento({ nome, custoPorKg: custo?.toString() || '' })} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded" title="Editar Preço">
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => removeMedicamento(nome)} className="p-1.5 text-red-500 hover:bg-red-50 rounded" title="Remover">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      );
+                    })}
                     {medicamentos.length === 0 && <span className="text-sm text-slate-400 italic">Nenhum medicamento na lista.</span>}
                   </div>
                 </div>
@@ -428,15 +483,62 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
                       <Plus className="w-5 h-5" />
                     </button>
                   </div>
-                  <div className="flex flex-wrap gap-2 max-h-60 overflow-y-auto p-2 bg-white rounded-lg border border-slate-200">
-                    {causas.map(causa => (
-                      <span key={causa} className="inline-flex items-center gap-1 px-3 py-1 bg-orange-50 text-orange-800 rounded-full text-xs font-medium border border-orange-200 shadow-sm">
-                        {causa}
-                        {isMaster && (<button onClick={() => removeCausa(causa)} className="hover:text-red-500 ml-1 text-slate-400">
-                          <X className="w-3 h-3" />
-                        </button>)}
-                      </span>
-                    ))}
+                  <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto p-2 bg-white rounded-lg border border-slate-200">
+                    {causas.map((causa, idx) => {
+                      const isEditing = editingCausa?.old === causa;
+                      
+                      if (isEditing) {
+                        return (
+                          <div key={causa + idx} className="flex items-center gap-2 bg-orange-50 p-2 rounded-lg border border-orange-200">
+                            <input
+                              type="text"
+                              value={editingCausa.new}
+                              onChange={e => setEditingCausa({...editingCausa, new: e.target.value})}
+                              placeholder="Nome da causa"
+                              className="flex-1 px-2 py-1 text-sm border border-orange-300 rounded outline-none focus:ring-1 focus:ring-orange-500"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => {
+                                const newName = editingCausa.new.trim();
+                                if (newName && newName !== editingCausa.old && !causas.includes(newName)) {
+                                  const newCausas = [...causas];
+                                  const targetIdx = newCausas.indexOf(editingCausa.old);
+                                  if (targetIdx !== -1) {
+                                    newCausas[targetIdx] = newName;
+                                    setCausas(newCausas);
+                                  }
+                                }
+                                setEditingCausa(null);
+                              }}
+                              className="p-1.5 bg-orange-600 text-white rounded hover:bg-orange-700 shadow-sm"
+                              title="Salvar"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setEditingCausa(null)} className="p-1.5 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 shadow-sm" title="Cancelar">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div key={causa + idx} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 hover:border-orange-300 transition-colors group">
+                          <span className="text-sm font-medium text-slate-700">{causa}</span>
+                          {isMaster && (
+                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity gap-1">
+                              <button onClick={() => setEditingCausa({ old: causa, new: causa })} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded" title="Editar">
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => removeCausa(causa)} className="p-1.5 text-red-500 hover:bg-red-50 rounded" title="Remover">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                     {causas.length === 0 && <span className="text-sm text-slate-400 italic">Nenhuma causa na lista.</span>}
                   </div>
                 </div>
@@ -511,9 +613,9 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
             </div>
           </div>
         )}
-        </>)}
-        {activeTab === 'catalogo' && selectedEmpresaId && <CatalogoGestao empresaId={selectedEmpresaId} />}
-        {activeTab === 'catalogo' && !selectedEmpresaId && <div className="text-slate-500 text-center py-8">Selecione o cliente na aba Geral para configurar o catálogo.</div>}
+        
+         
+        
       </div>
       </div>
     </div>

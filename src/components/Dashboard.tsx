@@ -154,7 +154,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
       const firstEmpresaId = filteredIntegrados[0].empresaId;
       const allSameEmpresa = filteredIntegrados.every(i => i.empresaId === firstEmpresaId);
       if (allSameEmpresa && firstEmpresaId) {
-        chartConfig = configs.find(c => c.empresa_id === firstEmpresaId);
+        chartConfig = configs.find((c: any) => c.empresa_id === firstEmpresaId);
       }
     }
 
@@ -319,7 +319,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
       .map(({ visit: v, age, realConsumo }) => {
         const integrado = filteredIntegrados.find(i => isVisitForIntegrado(v, i));
         
-        const currentConfig = configs.find(c => c.empresa_id === integrado?.empresaId);
+        const currentConfig = configs.find((c: any) => c.empresa_id === integrado?.empresaId);
         const expected = getExpectedConsumption(
           age,
           v.tipoLote,
@@ -767,7 +767,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
                     })
                     .map((row) => {
                       const mVal = row.animaisMortos !== undefined ? (Number(row.animaisMortos) / Number(row.animaisAlojados)) * 100 : Number(row.mortalidade || 0);
-                      const configRow = configs.find(c => c.empresa_id === integrados.find(i => i.id === row.integradoId)?.empresaId);
+                      const configRow = configs.find((c: any) => c.empresa_id === integrados.find(i => i.id === row.integradoId)?.empresaId);
                       const finalMeta = configRow?.meta_mortalidade !== undefined && configRow?.meta_mortalidade !== null ? configRow.meta_mortalidade : 3;
                       const propMeta = row.idade ? Number(((Math.min(row.idade, 105) / 105) * finalMeta).toFixed(2)) : finalMeta;
                       
@@ -1155,7 +1155,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
               <tbody className="divide-y divide-slate-100">
                 {filteredVisits.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((v) => {
                   const singleIntegrado = filteredIntegrados.find(i => isVisitForIntegrado(v, i));
-                  const currentConfig = configs.find(c => c.empresa_id === singleIntegrado?.empresaId);
+                  const currentConfig = configs.find((c: any) => c.empresa_id === singleIntegrado?.empresaId);
                   const age = calculateVisitAge(v, singleIntegrado);
                   const realConsumo = calculateRealConsumption(v);
                   const expected = getExpectedConsumption(age, v.tipoLote, v.pesoAloj, singleIntegrado?.alojamentoDate, singleIntegrado?.status, singleIntegrado?.fechamentoDate, currentConfig, undefined, v.date);
