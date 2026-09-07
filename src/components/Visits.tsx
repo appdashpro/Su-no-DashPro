@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Visit, Integrado, isVisitForIntegrado } from '../types';
 import { getExpectedConsumption, getActiveCurve } from '../data';
-import { Search, ArrowUpDown, Download, Plus, Eye, X, Trash2, Bug, Trash, FileText } from 'lucide-react';
+import { Search, ArrowUpDown, Download, Plus, Eye, X, Trash2, Bug, Trash, FileText, MessageCircle } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { getSavedUserProfile } from '../lib/auth';
 import { getEmpresaConfigsLocal, getSyncLogs, clearSyncLogs } from '../lib/storage';
 import { generateVisitaPDF, generateConsolidadoPDF, generateConsolidadoCompletePDF } from '../reports/pdfGenerator';
 import { ConsolidatedVisitasModal } from './ConsolidatedVisitasModal';
+import { generateWhatsAppSummary } from '../lib/whatsapp';
 
 interface VisitsListProps {
  pendingSyncIds?: string[];
@@ -248,7 +249,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
    </span>
  ) : '-'}
  </td>
- <td className="px-2 py-2 whitespace-nowrap">{v.volumeTotalCargas ?? '-'}</td>
+ <td className="px-2 py-2 whitespace-nowrap">{v.volumeTotalCargas !== undefined && v.volumeTotalCargas !== null && String(v.volumeTotalCargas).trim() !== '' ? Number(v.volumeTotalCargas).toFixed(2) : '-'}</td>
  <td className="px-2 py-2">
  <div className="text-xs leading-relaxed min-w-[650px] max-w-[900px] whitespace-pre-wrap text-left" title={v.recomendacao}>
  {v.recomendacao ? (
@@ -308,9 +309,20 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  onClick={() => setSelectedIntegradoDetails(v.integradoId)}
  className="text-slate-600 hover:text-slate-900 text-xs font-semibold px-2 py-1 rounded hover:bg-slate-100 transition-colors w-full text-center"
  title="Ver Detalhes do Lote"
- >
- Detalhes
- </button>
+                            >
+                              Detalhes
+                            </button>
+                            <button
+                              onClick={() => {
+                                const int = integrados.find(i => i.id === v.integradoId);
+                                const url = `https://wa.me/?text=${generateWhatsAppSummary(v, int)}`;
+                                window.open(url, '_blank');
+                              }}
+                              className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold px-2 py-1 rounded hover:bg-emerald-50 transition-colors w-full text-center flex items-center justify-center gap-1"
+                              title="Compartilhar via WhatsApp"
+                            >
+                              <MessageCircle className="w-3 h-3" /> WhatsApp
+                            </button>
  <button 
  onClick={() => {
  setDeleteConfirmId(null);

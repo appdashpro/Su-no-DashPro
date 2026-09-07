@@ -107,8 +107,24 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  const integradoId = targetIntegradoId;
  if (!initialData) safeStorage.removeItem('VISIT_FORM_DRAFT');
 
- onSave({
- ...visitData,
+ 
+      const formattedVisitData = { ...visitData };
+      const numericFields = [
+        'cargaAlojamento', 'consumoAlojamento',
+        'cargaCrescimento1', 'consumoCrescimento1',
+        'cargaCrescimento2', 'consumoCrescimento2',
+        'cargaCrescimento3', 'consumoCrescimento3',
+        'cargaTerminacao1', 'consumoTerminacao1',
+        'cargaTerminacao2', 'consumoTerminacao2'
+      ];
+      numericFields.forEach(k => {
+        if (formattedVisitData[k] !== undefined && formattedVisitData[k] !== null && String(formattedVisitData[k]).trim() !== '') {
+          formattedVisitData[k] = Number(Number(formattedVisitData[k]).toFixed(2));
+        }
+      });
+
+    onSave({
+      ...formattedVisitData,
  id: initialData ? initialData.id : generateUUID(),
  curva_consumo_id: activeCurve?.id,
  integradoId,
@@ -133,7 +149,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
      ? Number(t.pesoEstimadoKg)
      : (visitData.pesoAmostradoKg && Number(visitData.pesoAmostradoKg) > 0 ? Number(visitData.pesoAmostradoKg) : undefined)
  })),
- volumeTotalCargas: visitData.volumeTotalCargas !== undefined && visitData.volumeTotalCargas !== null && String(visitData.volumeTotalCargas).trim() !== '' ? Number(visitData.volumeTotalCargas) : undefined,
+ volumeTotalCargas: visitData.volumeTotalCargas !== undefined && visitData.volumeTotalCargas !== null && String(visitData.volumeTotalCargas).trim() !== '' ? Number(Number(visitData.volumeTotalCargas).toFixed(2)) : undefined,
  pesoAloj: visitData.pesoAloj !== undefined && visitData.pesoAloj !== null && String(visitData.pesoAloj).trim() !== '' ? Number(visitData.pesoAloj) : undefined,
  pontuacaoSanitaria: visitData.pontuacaoSanitaria !== undefined && visitData.pontuacaoSanitaria !== null && String(visitData.pontuacaoSanitaria).trim() !== '' ? Number(visitData.pontuacaoSanitaria) : undefined,
  } as Visit, integradoNome, alojamentoDate, empresaId);
@@ -288,7 +304,7 @@ const sumCargas = (Number(newData.cargaAlojamento) || 0) +
                   (Number(newData.cargaTerminacao2) || 0);
 
 if (name.startsWith('carga')) {
-    newData.volumeTotalCargas = sumCargas > 0 ? sumCargas : undefined;
+    newData.volumeTotalCargas = sumCargas > 0 ? Number(sumCargas.toFixed(2)) : undefined;
 }
 
 const currentVolumeTotal = Number(newData.volumeTotalCargas) || sumCargas;

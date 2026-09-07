@@ -379,7 +379,7 @@ export const storage = {
         'Animais Alojados': toNum(v.animaisAlojados),
         'Animais Mortos': toNum(v.animaisMortos),
         
-        'Vol. Cargas (kg)': toNum(v.volumeTotalCargas),
+        'Vol. Cargas (kg)': v.volumeTotalCargas !== undefined && v.volumeTotalCargas !== null ? Number(v.volumeTotalCargas).toFixed(2) : '',
         'Recomendação': v.recomendacao || '',
         'Consumo acumulado': toNum(v.consumoAcumuladoReal),
         'Comedouro': v.comedouro || '',
