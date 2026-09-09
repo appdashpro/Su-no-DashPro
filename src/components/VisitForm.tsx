@@ -74,7 +74,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
   const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
   const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
 
- return current.filter(c => !predefined.includesc).join(' / ');
+ return current.filter(c => !predefined.includes(c)).join(' / ');
  });
 
  const handleSubmit = (e: React.FormEvent) => {
@@ -768,7 +768,7 @@ if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') &
   const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
   const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
 
- const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter((c: string) => predefined.includesc) : [];
+ const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter((c: string) => predefined.includes(c)) : [];
  let newSelected;
  if (!isSelected) {
  newSelected = [...currentSelected, colab];
@@ -803,7 +803,7 @@ if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') &
   const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
   const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
 
- const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter((c: string) => predefined.includesc) : [];
+ const currentSelected = formData.colaborador ? formData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean).filter((c: string) => predefined.includes(c)) : [];
  const typed = val.split(/\s*[,/;-]\s*/).filter(Boolean);
  setFormData(prev => ({ ...prev, colaborador: [...currentSelected, ...typed].join(' / ') }));
  }}
