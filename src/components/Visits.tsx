@@ -184,7 +184,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
  </tr>
  ) : filteredVisits.map((v) => {
  const integrado = getIntegradoForVisit(v);
- const currentConfig = configs.find(c => c.empresa_id === integrado?.empresaId);
+ const currentConfig = configs.find((c: any) => c.empresa_id === integrado?.empresaId);
  const expected = getExpectedConsumption(v.idade, v.tipoLote, v.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, currentConfig, undefined, v.date);
  const activeCurveInfo = getActiveCurve(integrado?.alojamentoDate, integrado?.status, v.tipoLote, integrado?.fechamentoDate, currentConfig, undefined, v.date);
  const metas = activeCurveInfo?.metas || {};
@@ -296,7 +296,7 @@ export function VisitsList({ visits, integrados, onEditVisit, onDeleteVisit, onN
   onClick={() => {
     const integradoForVisit = getIntegradoForVisit(v);
     const empresa = empresas.find(e => e.id === integradoForVisit?.empresaId);
-    const currentConfig = configs.find(c => c.empresa_id === integradoForVisit?.empresaId);
+    const currentConfig = configs.find((c: any) => c.empresa_id === integradoForVisit?.empresaId);
     const loteVisits = visits.filter(visit => isVisitForIntegrado(visit, integradoForVisit!)).sort((a, b) => (a.idade || 0) - (b.idade || 0));
     generateVisitaPDF(v, integradoForVisit || null, empresa, currentConfig, loteVisits);
   }}

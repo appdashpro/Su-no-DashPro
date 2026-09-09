@@ -14,7 +14,7 @@ export function generateWhatsAppSummary(visit: Visit, integrado?: Integrado, pro
   let message = `*📋 RESUMO DA VISITA TÉCNICA*\n*Produtor:* ${produtorNome}\n*Data:* ${dataFormatada}\n*Técnico:* ${tecnicoNome}\n\n`;
 
   const cfgs = getEmpresaConfigsLocal();
-  const currentConfig = cfgs.find(c => c.empresa_id === integrado?.empresaId);
+  const currentConfig = cfgs.find((c: any) => c.empresa_id === integrado?.empresaId);
   const { metas } = getActiveCurve(integrado?.alojamentoDate, integrado?.status, visit.tipoLote || 'Misto', integrado?.fechamentoDate, currentConfig, visit.curva_consumo_id, visit.date);
   
   // A meta de consumo na visita geralmente reflete o esperado para a IDADE do lote
@@ -64,7 +64,7 @@ export function generateWhatsAppSummary(visit: Visit, integrado?: Integrado, pro
     let calculatedIndex = 0;
     if (visit.avaliacao_tecnica) {
       const { granja, suinos } = visit.avaliacao_tecnica;
-      const parseScore = (val) => {
+      const parseScore = (val?: number) => {
         if (val === 1) return 3; // Bom
         if (val === 2) return 2; // Regular
         if (val === 3) return 1; // Ruim
@@ -94,7 +94,7 @@ export function generateWhatsAppSummary(visit: Visit, integrado?: Integrado, pro
     
     if (visit.avaliacao_tecnica) {
       const { granja, suinos } = visit.avaliacao_tecnica;
-      const getStatusText = (val) => {
+      const getStatusText = (val?: number) => {
         if (val === 1) return 'Bom ✅';
         if (val === 2) return 'Regular ⚠️';
         if (val === 3) return 'Ruim ❌';

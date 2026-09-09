@@ -27,8 +27,21 @@ export function Login({ onLoginSuccess }: LoginProps) {
     const normEmail = email.trim().toLowerCase();
 
     try {
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: normEmail,
+        password,
+      });
+
+      if (signInError) throw signInError;
+
+      if (data.user) {
+        const profile = await resolveUserProfile(data.user.email || '', data.user.id);
+        saveUserProfile(profile);
+        cacheAuthSession(data.session);
+        if (onLoginSuccess) onLoginSuccess(profile);
+      }
+    } catch (err: any) {
       // 1. If offline, check if we have cached profile or offline fallback
-      
       if (
         err?.message?.includes('fetch') ||
         err?.message?.includes('Failed') ||
@@ -45,7 +58,6 @@ export function Login({ onLoginSuccess }: LoginProps) {
       
       // Simplify error message
       setError('Usuário ou senha incorretos.');
-
     } finally {
       setLoading(false);
     }

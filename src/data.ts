@@ -1635,14 +1635,14 @@ const defaultMetasV2 = {
 export const growthCurvesMisto: CurveVersion[] = [
   {
     version: 'btz',
-    nome: 'Curva Grupo BTZ',
+    // nome: 'Curva Grupo BTZ',
     effectiveDate: '2026-08-20',
     curve: growthCurveBtz,
     metas: defaultMetasBtz,
   },
   {
     version: 'bugio',
-    nome: 'Curva Bugio',
+    // nome: 'Curva Bugio',
     effectiveDate: '2026-08-01',
     curve: growthCurveBugio,
     metas: defaultMetasBugio,

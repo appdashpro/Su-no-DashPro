@@ -158,7 +158,7 @@ export function Prioridades({ integrados, visits, onNavigateToIntegrado }: Props
                   const safeAge = isNaN(item.age) ? 0 : item.age;
                   const progressPct = Math.min(100, Math.round((safeAge / 105) * 100) || 0);
                   
-                  const configRow = configs.find(c => c.empresa_id === item.integrado.empresaId);
+                  const configRow = configs.find((c: any) => c.empresa_id === item.integrado.empresaId);
                   const finalMeta = configRow?.meta_mortalidade !== undefined && configRow?.meta_mortalidade !== null ? configRow.meta_mortalidade : 3;
                   const propMeta = safeAge ? Number(((Math.min(safeAge, 105) / 105) * finalMeta).toFixed(2)) : finalMeta;
                   

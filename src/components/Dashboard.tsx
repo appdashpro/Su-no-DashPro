@@ -410,7 +410,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
             
             loteVisits.forEach(vi => {
               const viAge = calculateVisitAge(vi, integrado);
-              const viConfig = configs.find(c => c.empresa_id === (integrado?.empresaId));
+              const viConfig = configs.find((c: any) => c.empresa_id === (integrado?.empresaId));
               const viExpected = getExpectedConsumption(viAge, vi.tipoLote, vi.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, viConfig, undefined, vi.date);
               const viReal = calculateRealConsumption(vi);
               

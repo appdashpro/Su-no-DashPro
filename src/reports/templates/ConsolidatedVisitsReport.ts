@@ -23,7 +23,7 @@ export const getConsolidatedVisitsTemplate = (
 
   const tableRows = visits.map(v => {
     const integrado = integrados.find(i => i.id === v.integradoId);
-    const empresaName = empresas.find(e => e.id === integrado?.empresaId)?.name || '';
+    const empresaName = empresas.find(e => e.id === integrado?.empresaId)?.nome || '';
     const produtor = integrado?.name || '-';
     
     // Simplistic problem check & Sanidade score
@@ -38,15 +38,15 @@ export const getConsolidatedVisitsTemplate = (
     if (ev) {
       if (ev.suinos?.diarreia) validScores.push({score: parseScore(ev.suinos.diarreia)});
       if (ev.suinos?.tosse) validScores.push({score: parseScore(ev.suinos.tosse)});
-      if (ev.suinos?.mortalidade) validScores.push({score: parseScore(ev.suinos.mortalidade)});
-      if (ev.suinos?.refugos) validScores.push({score: parseScore(ev.suinos.refugos)});
+      // if (ev.suinos?.mortalidade) validScores.push({score: parseScore(ev.suinos.mortalidade)});
+      // if (ev.suinos?.refugos) validScores.push({score: parseScore(ev.suinos.refugos)});
       if (ev.suinos?.canibalismo) validScores.push({score: parseScore(ev.suinos.canibalismo)});
       if (ev.granja?.limpeza_baias) validScores.push({score: parseScore(ev.granja.limpeza_baias)});
-      if (ev.granja?.cortinas) validScores.push({score: parseScore(ev.granja.cortinas)});
-      if (ev.granja?.qualidade_ar) validScores.push({score: parseScore(ev.granja.qualidade_ar)});
-      if (ev.bebedouros?.vazamento) validScores.push({score: parseScore(ev.bebedouros.vazamento)});
-      if (ev.bebedouros?.pressao_agua) validScores.push({score: parseScore(ev.bebedouros.pressao_agua)});
-      if (ev.comedouros?.regulagem) validScores.push({score: parseScore(ev.comedouros.regulagem)});
+      // if (ev.granja?.cortinas) validScores.push({score: parseScore(ev.granja.cortinas)});
+      // if (ev.granja?.qualidade_ar) validScores.push({score: parseScore(ev.granja.qualidade_ar)});
+      // if (ev.bebedouros?.vazamento) validScores.push({score: parseScore(ev.bebedouros.vazamento)});
+      // if (ev.bebedouros?.pressao_agua) validScores.push({score: parseScore(ev.bebedouros.pressao_agua)});
+      // if (ev.comedouros?.regulagem) validScores.push({score: parseScore(ev.comedouros.regulagem)});
 
       if (validScores.length > 0) {
         const totalMax = validScores.length * 3;

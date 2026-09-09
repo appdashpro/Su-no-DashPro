@@ -374,10 +374,10 @@ export function TratamentosFormSection({ tratamentos, onChange, idade, animaisVi
                     <span className="block text-blue-600/70">Total Tratamento:</span>
                     <span className="font-semibold text-sm">{tratamento.quantidadeTotal} kg</span>
                   </div>
-                  {tratamento.custoTotal > 0 && (
+                  {(tratamento.custoTotal || 0) > 0 && (
                   <div>
                     <span className="block text-blue-600/70">Custo Total:</span>
-                    <span className="font-semibold text-sm">R$ {tratamento.custoTotal}</span>
+                    <span className="font-semibold text-sm">R$ {tratamento.custoTotal || 0}</span>
                   </div>
                   )}
                 </div>

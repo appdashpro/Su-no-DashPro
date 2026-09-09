@@ -26,7 +26,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  const [formData, setFormData] = useState<Partial<Visit> & { alojamentoDate?: string, integradoNome?: string, empresaId?: string }>(() => {
  if (initialData) {
  const integrado = integrados.find(i => i.id === initialData.integradoId);
- const currentConfig = configs.find(c => c.empresa_id === (initialData.empresaId || integrado?.empresaId));
+ const currentConfig = configs.find((c: any) => c.empresa_id === (integrado?.empresaId));
  const { metas } = getActiveCurve(integrado?.alojamentoDate, integrado?.status, initialData.tipoLote || 'Misto', integrado?.fechamentoDate, currentConfig, initialData.curva_consumo_id, initialData.date);
  const initialPesoAmostrado = (initialData.pesoAmostradoKg !== undefined && Number(initialData.pesoAmostradoKg) > 0)
    ? Number(initialData.pesoAmostradoKg)
@@ -70,7 +70,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  const current = initialData.colaborador.split(/\s*[,/;-]\s*/).filter(Boolean);
  
   const cfgs = getEmpresaConfigsLocal();
-  const tCfg = cfgs.find(c => c.empresa_id === (formData?.empresaId));
+  const tCfg = cfgs.find((c: any) => c.empresa_id === (formData?.empresaId));
   const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
   const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
 
@@ -118,8 +118,8 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
         'cargaTerminacao2', 'consumoTerminacao2'
       ];
       numericFields.forEach(k => {
-        if (formattedVisitData[k] !== undefined && formattedVisitData[k] !== null && String(formattedVisitData[k]).trim() !== '') {
-          formattedVisitData[k] = Number(Number(formattedVisitData[k]).toFixed(2));
+        if ((formattedVisitData as any)[k] !== undefined && (formattedVisitData as any)[k] !== null && String((formattedVisitData as any)[k]).trim() !== '') {
+          (formattedVisitData as any)[k] = Number(Number((formattedVisitData as any)[k]).toFixed(2));
         }
       });
 
@@ -180,7 +180,7 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
  const activeTipo = name === 'tipoLote' ? value : formData.tipoLote;
  const activeAlojDate = name === 'alojamentoDate' ? value : formData.alojamentoDate;
  const matchInt = integrados.find(i => i.id === (initialData?.integradoId || formData.integradoId) || (i.name === formData.integradoNome && i.alojamentoDate === formData.alojamentoDate));
- const currentConfig = configs.find(c => c.empresa_id === (formData.empresaId || matchInt?.empresaId));
+ const currentConfig = configs.find((c: any) => c.empresa_id === (formData.empresaId || matchInt?.empresaId));
  const { metas } = getActiveCurve(activeAlojDate, undefined, activeTipo, undefined, currentConfig, formData.curva_consumo_id, formData.date);
  updates = {
  ...updates,
@@ -246,11 +246,11 @@ export function VisitaForm({ integrados, empresas = [], visits = [], initialData
     const matchingIntegradosAll = integrados.filter(i => (i.name || '').toLowerCase() === String(tempState.integradoNome || '').toLowerCase());
     const emAndamento = matchingIntegradosAll.filter(i => i.status === 'Em andamento');
     let integrado = emAndamento.length > 0 ? (tempState.alojamentoDate ? emAndamento.find(i => i.alojamentoDate === tempState.alojamentoDate) || emAndamento[0] : emAndamento[0]) : null;
-    if (!integrado) integrado = integrados.find(i => i.id === (initialData?.integradoId || formData.integradoId));
+    if (!integrado) integrado = integrados.find(i => i.id === (initialData?.integradoId || formData.integradoId)) || null;
     
     const activeAlojDate = tempState.alojamentoDate || integrado?.alojamentoDate;
     const activeTipo = tempState.tipoLote || 'Misto';
-    const currentConfig = configs.find(c => c.empresa_id === (tempState.empresaId || integrado?.empresaId));
+    const currentConfig = configs.find((c: any) => c.empresa_id === (tempState.empresaId || integrado?.empresaId));
     
     const { metas } = getActiveCurve(activeAlojDate, integrado?.status, activeTipo, integrado?.fechamentoDate, currentConfig, tempState.curva_consumo_id, tempState.date);
     updates = { ...updates, ...metas };
@@ -336,7 +336,7 @@ if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') &
  );
  const currentIntegradoId = matchingIntegrado?.id || initialData?.integradoId || `i_${(formData.integradoNome || '').replace(/\s+/g, '').toLowerCase()}_${(formData.alojamentoDate || '').replace(/[-/]/g, '')}`;
  const integrado = matchingIntegrado || integrados.find(i => i.id === currentIntegradoId);
-  const currentConfig = configs.find(c => c.empresa_id === (formData.empresaId || integrado?.empresaId));
+  const currentConfig = configs.find((c: any) => c.empresa_id === (formData.empresaId || integrado?.empresaId));
   const currentIdade = Number(formData.idade) || 0;
   const finalMetaMortalidade = currentConfig?.meta_mortalidade !== undefined && currentConfig?.meta_mortalidade !== null ? currentConfig.meta_mortalidade : 3;
   const propMetaMortalidade = currentIdade ? Number(((Math.min(currentIdade, 105) / 105) * finalMetaMortalidade).toFixed(2)) : finalMetaMortalidade;
@@ -764,7 +764,7 @@ if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') &
  onClick={() => {
  
   const cfgs = getEmpresaConfigsLocal();
-  const tCfg = cfgs.find(c => c.empresa_id === (formData?.empresaId));
+  const tCfg = cfgs.find((c: any) => c.empresa_id === (formData?.empresaId));
   const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
   const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
 
@@ -799,7 +799,7 @@ if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') &
  setOutrosColab(val);
  
   const cfgs = getEmpresaConfigsLocal();
-  const tCfg = cfgs.find(c => c.empresa_id === (formData?.empresaId));
+  const tCfg = cfgs.find((c: any) => c.empresa_id === (formData?.empresaId));
   const isPastreLocal = empresas?.find(e => e.id === formData?.empresaId)?.nome?.toLowerCase().includes('pastre');
   const predefined = (tCfg?.tecnicos !== undefined && tCfg?.tecnicos !== null) ? tCfg.tecnicos : (isPastreLocal ? DEFAULT_TECNICOS : []);
 
