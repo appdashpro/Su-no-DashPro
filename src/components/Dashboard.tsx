@@ -332,27 +332,51 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
           v.date
         );
         
-        const mortPct = calculateMortalityRate(v);
+        const mortPct = calculateMortalityRate(v, visits);
         const parseScore = (s?: number) => { if(!s) return 0; if(s===1) return 3; if(s===2) return 2; if(s===3) return 1; return 0; };
-        const ev = v.avaliacao_tecnica;
+        const loteVisitsSanity = visits.filter(vi => vi.integradoId === v.integradoId && vi.avaliacao_tecnica);
         let sanitIndex = 100;
-        if (ev) {
-          const validScores: {score: number}[] = [];
-          if (ev.suinos?.diarreia) validScores.push({score: parseScore(ev.suinos.diarreia)});
-          if (ev.suinos?.tosse) validScores.push({score: parseScore(ev.suinos.tosse)});
-          if (ev.suinos?.uniformidade) validScores.push({score: parseScore(ev.suinos.uniformidade)});
-          if (ev.suinos?.canibalismo) validScores.push({score: parseScore(ev.suinos.canibalismo)});
-          if (ev.suinos?.prolapso) validScores.push({score: parseScore(ev.suinos.prolapso)});
-          if (ev.granja?.limpeza_baias) validScores.push({score: parseScore(ev.granja.limpeza_baias)});
-          if (ev.granja?.desperdicio_racao) validScores.push({score: parseScore(ev.granja.desperdicio_racao)});
-          if (ev.granja?.ventilacao_cortinas) validScores.push({score: parseScore(ev.granja.ventilacao_cortinas)});
-          if (ev.granja?.ficha_lote) validScores.push({score: parseScore(ev.granja.ficha_lote)});
-
-          if (validScores.length > 0) {
-            const totalMax = validScores.length * 3;
-            const currentScore = validScores.reduce((acc, curr) => acc + curr.score, 0);
-            sanitIndex = Math.round((currentScore / totalMax) * 100);
-          }
+        
+        if (loteVisitsSanity.length > 0) {
+            const aggregated: Record<string, { total: number, count: number }> = {
+                'Limpeza': { total: 0, count: 0 },
+                'Desperdício': { total: 0, count: 0 },
+                'Ventilação': { total: 0, count: 0 },
+                'Tosse': { total: 0, count: 0 },
+                'Diarreia': { total: 0, count: 0 },
+                'Uniformidade': { total: 0, count: 0 },
+                'Canibalismo': { total: 0, count: 0 },
+            };
+            
+            loteVisitsSanity.forEach(vi => {
+                const ev = vi.avaliacao_tecnica;
+                if (!ev) return;
+                
+                const scores = {
+                    'Limpeza': parseScore(ev.granja?.limpeza_baias),
+                    'Desperdício': parseScore(ev.granja?.desperdicio_racao),
+                    'Ventilação': parseScore(ev.granja?.ventilacao_cortinas),
+                    'Tosse': parseScore(ev.suinos?.tosse),
+                    'Diarreia': parseScore(ev.suinos?.diarreia),
+                    'Uniformidade': parseScore(ev.suinos?.uniformidade),
+                    'Canibalismo': parseScore(ev.suinos?.canibalismo),
+                };
+                
+                Object.entries(scores).forEach(([key, score]) => {
+                    if (score > 0) {
+                        aggregated[key].total += score;
+                        aggregated[key].count += 1;
+                    }
+                });
+            });
+            
+            const validScores = Object.entries(aggregated).map(([k, d]) => d.count > 0 ? (d.total / d.count) : 0).filter(s => s > 0);
+            
+            if (validScores.length > 0) {
+                const totalMax = validScores.length * 3;
+                const currentScore = validScores.reduce((acc, curr) => acc + curr, 0);
+                sanitIndex = Math.round((currentScore / totalMax) * 100);
+            }
         }
 
 
@@ -378,7 +402,27 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
           diferenca: expected > 0 ? Number((realConsumo - expected).toFixed(2)) : 0,
           mortalidade: mortPct,
           sanidade: sanitIndex,
-          aderencia: expected > 0 && realConsumo > 0 ? Math.max(0, 100 - (Math.abs(realConsumo - expected) / expected * 100)) : 100,
+          aderencia: (() => {
+            // Find all visits for this lote
+            const loteVisits = visits.filter(vi => vi.integradoId === v.integradoId);
+            let totalAdherence = 0;
+            let validPoints = 0;
+            
+            loteVisits.forEach(vi => {
+              const viAge = calculateVisitAge(vi, integrado);
+              const viConfig = configs.find(c => c.empresa_id === (integrado?.empresaId));
+              const viExpected = getExpectedConsumption(viAge, vi.tipoLote, vi.pesoAloj, integrado?.alojamentoDate, integrado?.status, integrado?.fechamentoDate, viConfig, undefined, vi.date);
+              const viReal = calculateRealConsumption(vi);
+              
+              if (viExpected && viExpected > 0 && viReal > 0) {
+                const errorRate = Math.abs(viReal - viExpected) / viExpected;
+                totalAdherence += Math.max(0, 100 - (errorRate * 100));
+                validPoints++;
+              }
+            });
+            
+            return validPoints > 0 ? Math.round(totalAdherence / validPoints) : (expected > 0 && realConsumo > 0 ? Math.max(0, 100 - (Math.abs(realConsumo - expected) / expected * 100)) : 100);
+          })(),
           animaisMortos: v.animaisMortos,
           animaisAlojados: v.animaisAlojados,
         };

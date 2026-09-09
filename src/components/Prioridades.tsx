@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Integrado, Visit } from '../types';
+import { getEmpresaConfigsLocal } from '../lib/storage';
 import { calculatePriority, PriorityScore } from '../lib/priority';
 import { AlertCircle, Clock, TrendingDown, Pill, Activity, ChevronRight, Zap, Target, ChevronDown, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck } from 'lucide-react';
 
@@ -14,6 +15,7 @@ export function Prioridades({ integrados, visits, onNavigateToIntegrado }: Props
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const activeIntegrados = integrados.filter(i => i.status === 'Em andamento');
+  const configs = getEmpresaConfigsLocal();
 
   const allPrioridades = useMemo(() => {
     return activeIntegrados.map(int => {
@@ -155,6 +157,19 @@ export function Prioridades({ integrados, visits, onNavigateToIntegrado }: Props
                 prioridades.map((item, index) => {
                   const safeAge = isNaN(item.age) ? 0 : item.age;
                   const progressPct = Math.min(100, Math.round((safeAge / 105) * 100) || 0);
+                  
+                  const configRow = configs.find(c => c.empresa_id === item.integrado.empresaId);
+                  const finalMeta = configRow?.meta_mortalidade !== undefined && configRow?.meta_mortalidade !== null ? configRow.meta_mortalidade : 3;
+                  const propMeta = safeAge ? Number(((Math.min(safeAge, 105) / 105) * finalMeta).toFixed(2)) : finalMeta;
+                  
+                  const isMortalityOut = item.mortality > propMeta;
+                  const isMortalityGood = item.mortality <= propMeta;
+                  
+                  // Feed deviation matches Dashboard: > 5 red, < -5 green, otherwise blue.
+                  const isFeedRed = item.feedDeviation !== null && item.feedDeviation > 5;
+                  const isFeedGreen = item.feedDeviation !== null && item.feedDeviation < -5;
+                  const isFeedBlue = item.feedDeviation !== null && Math.abs(item.feedDeviation) <= 5;
+
                   const isExpanded = expandedId === item.integrado.id;
                   
                   return (
@@ -202,14 +217,14 @@ export function Prioridades({ integrados, visits, onNavigateToIntegrado }: Props
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5" title="Desvio de Consumo">
-                              <TrendingDown className={`h-3.5 w-3.5 ${item.feedDeviation !== null && item.feedDeviation < -2 ? 'text-red-500' : 'text-slate-400'}`} />
-                              <span className={item.feedDeviation !== null && item.feedDeviation < -2 ? 'text-red-700 font-bold' : 'text-slate-600 font-medium'}>
+                              <TrendingDown className={`h-3.5 w-3.5 ${isFeedRed ? 'text-red-500' : isFeedGreen ? 'text-emerald-500' : isFeedBlue ? 'text-blue-500' : 'text-slate-400'}`} />
+                              <span className={isFeedRed ? 'text-red-700 font-bold' : isFeedGreen ? 'text-emerald-700 font-bold' : isFeedBlue ? 'text-blue-700 font-medium' : 'text-slate-600 font-medium'}>
                                 {item.feedDeviation !== null ? `${item.feedDeviation > 0 ? '+' : ''}${item.feedDeviation.toFixed(2)}kg` : 'N/A'}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5" title="Mortalidade Atual">
-                              <Activity className={`h-3.5 w-3.5 ${item.mortality >= 2.5 ? 'text-red-500' : 'text-slate-400'}`} />
-                              <span className={item.mortality >= 2.5 ? 'text-red-700 font-bold' : 'text-slate-600 font-medium'}>
+                              <Activity className={`h-3.5 w-3.5 ${isMortalityOut ? 'text-red-500' : isMortalityGood ? 'text-emerald-500' : 'text-slate-400'}`} />
+                              <span className={isMortalityOut ? 'text-red-700 font-bold' : isMortalityGood ? 'text-emerald-700 font-medium' : 'text-slate-600 font-medium'}>
                                 {item.mortality.toFixed(2)}%
                               </span>
                             </div>

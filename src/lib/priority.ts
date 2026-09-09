@@ -88,8 +88,9 @@ export function calculatePriority(integrado: Integrado, allVisits: Visit[]): Pri
 
   // 2. Mortality
   let mortalityPct = 0;
-  if (latestVisit.animaisAlojados && latestVisit.animaisAlojados > 0 && latestVisit.animaisMortos !== undefined && latestVisit.animaisMortos > 0) {
-    mortalityPct = (latestVisit.animaisMortos / latestVisit.animaisAlojados) * 100;
+  const totalDescartes = visits.reduce((acc, v) => acc + (v.descartesPeriodo || 0), 0);
+  if (latestVisit.animaisAlojados && latestVisit.animaisAlojados > 0 && latestVisit.animaisMortos !== undefined && latestVisit.animaisMortos >= 0) {
+    mortalityPct = ((latestVisit.animaisMortos + totalDescartes) / latestVisit.animaisAlojados) * 100;
   } else if (latestVisit.mortalidade !== undefined) {
     mortalityPct = latestVisit.mortalidade;
   }
