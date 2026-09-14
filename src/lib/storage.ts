@@ -75,21 +75,6 @@ export const getEmpresaConfigsLocal = () => {
     const data = safeStorage.getItem(CONFIGS_KEY); 
     let parsed = data ? JSON.parse(data) : []; 
     
-    // Inject default curves to any config that is missing them
-    parsed.forEach((c: any) => {
-      if (!c.curva_desempenho || c.curva_desempenho.length === 0) {
-        c.curva_desempenho = defaultMugnolConfig.curva_desempenho;
-      } else {
-         const hasPadrao = c.curva_desempenho.find((curve: any) => curve.id === 'mugnol_padrao_2026');
-         if (!hasPadrao) {
-            c.curva_desempenho.push(defaultMugnolConfig.curva_desempenho[0]);
-         }
-      }
-      if (!c.programa_alimentar || c.programa_alimentar.length === 0) {
-        c.programa_alimentar = defaultMugnolConfig.programa_alimentar;
-      }
-    });
-
     // Ensure Mugnol config is always present if not explicitly saved
     const mugnolIndex = parsed.findIndex((c: any) => c.empresa_id === defaultMugnolConfig.empresa_id);
     if (mugnolIndex === -1) {

@@ -1,9 +1,10 @@
 const fs = require('fs');
-let code = fs.readFileSync('src/lib/storage.ts', 'utf8');
 
-code = code.replace(
-  "concentracao: t.concentracao || null,",
-  "concentracao: t.concentracao || null,\n            custo_total: t.custoTotal || null,"
-);
+const file = 'src/lib/storage.ts';
+let code = fs.readFileSync(file, 'utf8');
 
-fs.writeFileSync('src/lib/storage.ts', code);
+const regex = /\/\/\ Inject default curves to any config that is missing them[\s\S]*?parsed\.forEach\(\(c: any\) => \{[\s\S]*?\}\);\s*\/\/\ Ensure Mugnol config/g;
+
+code = code.replace(regex, '// Ensure Mugnol config');
+
+fs.writeFileSync(file, code);
