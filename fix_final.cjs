@@ -1,17 +1,6 @@
 const fs = require('fs');
+let code = fs.readFileSync('src/components/EmpresaConfigGestao.tsx', 'utf8');
 
-function replace(file, target, repl) {
-  let content = fs.readFileSync(file, 'utf8');
-  content = content.replace(target, repl);
-  fs.writeFileSync(file, content);
-}
-
-replace('src/components/Login.tsx', "if (\n        err?.message?.includes('fetch') ||", "if (\n        err?.message?.includes('fetch') ||"); // Wait, I already replaced it but it still gives err. Let's look at Login.tsx
-replace('src/components/TratamentosFormSection.tsx', "R$ {tratamento.custoTotal.toFixed(2)}", "R$ {(tratamento.custoTotal || 0).toFixed(2)}");
-replace('src/components/VisitForm.tsx', "(initialData.empresaId || integrado?.empresaId)", "(integrado?.empresaId)");
-replace('src/components/VisitForm.tsx', "const selectedIntegrado = integrados.find(i => i.id === selectedId);", "const selectedIntegrado = integrados.find(i => i.id === selectedId) || null;");
-replace('src/data.ts', "nome: 'Versão Default',", "// nome: 'Versão Default',");
-replace('src/lib/priority.ts', "configs.find(c =>", "configs.find((c: any) =>");
-replace('src/lib/whatsapp.ts', "configs.find(c =>", "configs.find((c: any) =>");
-replace('src/lib/whatsapp.ts', "const parseScore = (val) => {", "const parseScore = (val?: number) => {");
-
+// I am going to remove the duplicate `</div></div>` which caused the JSX to end prematurely.
+// Wait! If the JSX ended prematurely at line 350, then the REST of the file is parsed as regular TypeScript!
+// Let's check if the JSX ends at line 350!

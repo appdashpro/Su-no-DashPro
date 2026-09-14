@@ -1662,6 +1662,58 @@ export const growthCurvesMisto: CurveVersion[] = [
 ];
 
 export const getActiveCurve = (alojamentoDate?: string, status?: string, tipoLote?: string, fechamentoDate?: string, empresaConfig?: any, curvaId?: string, visitDate?: string) => {
+  if (empresaConfig?.tipo_calculo_curva === 'GOMPERTZ') {
+    const gParams = empresaConfig?.curva_desempenho?.find?.((c: any) => c._type === 'GOMPERTZ_PARAMS');
+    const pm = empresaConfig?.gompertz_params?.pm || gParams?.pm || 260;
+    const b = empresaConfig?.gompertz_params?.b || gParams?.b || 0.012;
+    const em = empresaConfig?.gompertz_params?.em || gParams?.em || 3780;
+    const pi = empresaConfig?.gompertz_params?.pi || gParams?.pi || 22.00; // Default visualization weight
+    const curve = generateGompertzCurve(pm, b, em, pi, 120);
+    
+    let metaAlojamento = 0, metaCrescimento1 = 0, metaCrescimento2 = 0, metaCrescimento3 = 0, metaTerminacao1 = 0, metaTerminacao2 = 0;
+    const pData = empresaConfig?.curva_desempenho?.find?.((c: any) => c._type === 'PROGRAMA_ALIMENTAR');
+    const fases = pData?.fases || empresaConfig?.programa_alimentar || [];
+    if (fases && fases.length > 0 && fases[0].fase) {
+      let currentDay = 0;
+      const getMetaForPhase = (faseName) => {
+        const faseConfig = fases.find((f) => f.fase === faseName);
+        if (!faseConfig) return 0;
+        let duration = faseConfig.duracaoDias || 0;
+        let total = 0;
+        for (let i = 0; i < duration; i++) {
+          if (currentDay < curve.length) {
+            total += curve[currentDay].cmd;
+            currentDay++;
+          }
+        }
+        return Number(total.toFixed(2));
+      };
+      
+      metaAlojamento = getMetaForPhase('Alojamento');
+      metaCrescimento1 = getMetaForPhase('Crescimento 1');
+      metaCrescimento2 = getMetaForPhase('Crescimento 2');
+      metaCrescimento3 = getMetaForPhase('Crescimento 3');
+      metaTerminacao1 = getMetaForPhase('Terminação 1');
+      metaTerminacao2 = getMetaForPhase('Terminação 2');
+    }
+    
+    return {
+      id: 'gompertz',
+      curve: curve,
+      metas: {
+        metaAlojamento,
+        metaCrescimento1,
+        metaCrescimento2,
+        metaCrescimento3,
+        metaTerminacao1,
+        metaTerminacao2,
+        metaAcumulada: curve[curve.length - 1].consumoAcumulado
+      },
+      tipoCalculo: 'GOMPERTZ'
+    };
+
+  }
+
   if (empresaConfig?.curva_desempenho && Array.isArray(empresaConfig.curva_desempenho) && empresaConfig.curva_desempenho.length > 0) {
     if ('dia' in empresaConfig.curva_desempenho[0]) {
       // Legacy flat array structure
@@ -1793,6 +1845,31 @@ export const defaultMetasFemea = {
   metaAcumulada: 166.29
 };
 
+export const generateGompertzCurve = (pm: number, b: number, em: number, pi: number, days: number = 120) => {
+  const curve = [];
+  let currentAccumulated = 0;
+  for (let t = 0; t < days; t++) {
+    const W = pm * Math.exp(Math.log(pi / pm) * Math.exp(-b * t));
+    const gpd = b * W * Math.log(pm / W);
+    const cmd = ((106 * Math.pow(W, 0.75)) + (2211 + 76.66 * W - 0.3726 * Math.pow(W, 2)) * gpd) / em;
+    
+    currentAccumulated += cmd;
+    
+    // Peso Final will be W + gpd, or next day's W
+    const nextW = pm * Math.exp(Math.log(pi / pm) * Math.exp(-b * (t + 1)));
+    
+    curve.push({
+      dia: t + 1,
+      pesoInicial: W,
+      pesoFinal: nextW,
+      cmd: cmd,
+      gpd: gpd,
+      consumoAcumulado: currentAccumulated
+    });
+  }
+  return curve;
+};
+
 export const getExpectedPerformance = (idade: number, tipoLote?: 'Misto' | 'Fêmea' | 'Macho', pesoAloj?: number, alojamentoDate?: string, status?: string, fechamentoDate?: string, empresaConfig?: any, curvaId?: string, visitDate?: string) => {
   const activeCurveInfo = getActiveCurve(alojamentoDate, status, tipoLote, fechamentoDate, empresaConfig, curvaId, visitDate);
   
@@ -1806,6 +1883,29 @@ export const getExpectedPerformance = (idade: number, tipoLote?: 'Misto' | 'Fêm
   // Calculate offset if tipo_calculo_curva is PESO_ALOJAMENTO
   let offsetDays = 0;
   const tipoCalculo = activeCurveInfo.tipoCalculo || empresaConfig?.tipo_calculo_curva;
+    if (tipoCalculo === 'GOMPERTZ') {
+    const gParams = empresaConfig?.curva_desempenho?.find?.((c: any) => c._type === 'GOMPERTZ_PARAMS');
+    const pm = empresaConfig?.gompertz_params?.pm || gParams?.pm || 260;
+    const b = empresaConfig?.gompertz_params?.b || gParams?.b || 0.012;
+    const em = empresaConfig?.gompertz_params?.em || gParams?.em || 3780;
+    const pi = (pesoAloj && Number(pesoAloj) > 0) ? Number(pesoAloj) : (empresaConfig?.gompertz_params?.pi || gParams?.pi || 22.00);
+    
+    const gompertzCurve = generateGompertzCurve(pm, b, em, pi, Math.max(120, idade));
+    
+    for (let d = 0; d < idade; d++) {
+      let point = gompertzCurve.find((p: any) => p.dia === (d + 1));
+      if (point) {
+        totalConsumo += point.cmd;
+        currentWeight = point.pesoFinal;
+      }
+    }
+    
+    return {
+      expectedConsumption: Number(totalConsumo.toFixed(2)),
+      expectedWeight: Number(currentWeight.toFixed(2))
+    };
+  }
+
   if (tipoCalculo === 'PESO_ALOJAMENTO' && pesoAloj && Number(pesoAloj) > 0) {
     // Find the day in the curve where pesoInicial is closest to pesoAloj
     // (Assuming curve is sorted by day)

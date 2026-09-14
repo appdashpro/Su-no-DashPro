@@ -1,6 +1,7 @@
+const ts = require('typescript');
 const fs = require('fs');
-let code = fs.readFileSync('src/components/EmpresaConfigGestao.tsx', 'utf8');
 
-code = code.replace("/>}", "");
-
-fs.writeFileSync('src/components/EmpresaConfigGestao.tsx', code);
+const code = fs.readFileSync('src/components/EmpresaConfigGestao.tsx', 'utf8');
+// Let's find the unclosed JSX tag by just counting manually in a simple way
+let divs = 0;
+// We can just dump lines with <div> and </div>

@@ -18,7 +18,7 @@ export interface CurveConfig {
   dataVigencia: string;
   tipoLote: 'Misto' | 'Macho' | 'Fêmea';
   fase?: string;
-  tipoCalculo: 'DIA_UM' | 'PESO_ALOJAMENTO';
+  tipoCalculo: 'DIA_UM' | 'PESO_ALOJAMENTO' | 'GOMPERTZ';
   metaMortalidade: number;
   last_modified_by?: string;
   last_modified_at?: string;
@@ -34,7 +34,8 @@ export interface MedicamentoConfig {
 
 export interface EmpresaConfig {
   empresa_id: string;
-  tipo_calculo_curva: 'DIA_UM' | 'PESO_ALOJAMENTO';
+  tipo_calculo_curva: 'DIA_UM' | 'PESO_ALOJAMENTO' | 'GOMPERTZ';
+  gompertz_params?: { pm: number; b: number; em: number; pi?: number; };
   meta_mortalidade: number;
   curva_desempenho?: any[]; // Now can hold CurveConfig[] or legacy flat array
   programa_alimentar: any[];

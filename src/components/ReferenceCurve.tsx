@@ -217,7 +217,34 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
       }
 
       if (activeData) {
-        setConfig(activeData);
+        // Extract nested programa_alimentar if it exists
+        let pAlimentar = activeData.programa_alimentar;
+        if (activeData.curva_desempenho) {
+          const pData = activeData.curva_desempenho.find((c: any) => c._type === 'PROGRAMA_ALIMENTAR');
+          if (pData && pData.fases) {
+            pAlimentar = pData.fases;
+          }
+        }
+        setConfig({ ...activeData, programa_alimentar: pAlimentar });
+
+        if (activeData.tipo_calculo_curva === 'GOMPERTZ') {
+          // Dynamically calculate and display the Gompertz curve
+          const { getActiveCurve } = await import('../data');
+          const dynamicCurveInfo = getActiveCurve(undefined, undefined, undefined, undefined, activeData);
+          setCurvas([{
+            id: 'gompertz_dynamic',
+            nome: 'Curva Gompertz (Dinâmica)',
+            dataVigencia: 'Sempre',
+            tipoLote: 'Misto',
+            tipoCalculo: 'GOMPERTZ',
+            metaMortalidade: activeData.meta_mortalidade || 0,
+            curve: dynamicCurveInfo.curve,
+            metas: dynamicCurveInfo.metas
+          }]);
+          setSelectedCurvaId('gompertz_dynamic');
+          return;
+        }
+
         if (activeData.curva_desempenho && Array.isArray(activeData.curva_desempenho)) {
            // filter out legacy arrays if they exist, or map them
            if (activeData.curva_desempenho.length > 0 && 'dia' in activeData.curva_desempenho[0]) {
@@ -322,10 +349,16 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
   const getPhaseDuration = (phaseName: string) => {
     const progAlim = getActiveProgramaAlimentar();
     if (!progAlim) return '-';
+    // Check new Gompertz structure
+    const newProg = progAlim.find((p: any) => p.fase && p.fase.toLowerCase() === phaseName.toLowerCase());
+    if (newProg && newProg.duracaoDias) {
+      return newProg.duracaoDias;
+    }
+    // Check old structure
     const prog = progAlim.find((p: any) => (p.nome && p.nome.toLowerCase() === phaseName.toLowerCase()) || (p.racao && p.racao.toLowerCase() === phaseName.toLowerCase()));
     if (prog) {
       const dias = (Number(prog.dia_fim) - Number(prog.dia_inicio)) + 1;
-      return `${dias}`;
+      return isNaN(dias) ? '-' : dias;
     }
     return '-';
   };
@@ -429,7 +462,7 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
               >
                 {curvas.length === 0 ? <option value="">Nenhuma curva</option> : null}
                 {uniqueGroups.map(g => (
-                  <option key={g.key} value={g.key}>{g.nome} ({new Date(g.dataVigencia + 'T12:00:00').toLocaleDateString('pt-BR')}) {g.dataVigencia === activeDateKey ? (isEditing ? '(!)' : '✓ EM UTILIZAÇÃO') : ''}</option>
+                  <option key={g.key} value={g.key}>{g.nome} ({g.dataVigencia === 'Sempre' ? 'Sempre' : new Date(g.dataVigencia + 'T12:00:00').toLocaleDateString('pt-BR')}) {g.dataVigencia === activeDateKey ? (isEditing ? '(!)' : '✓ EM UTILIZAÇÃO') : ''}</option>
                 ))}
               </select>
             </div>
@@ -499,7 +532,7 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
                   </button>
                 </div>
               ) : currentUser?.papel === 'MASTER' ? (
-                <button onClick={() => setIsEditing(true)} className="flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200">
+                <button onClick={() => setIsEditing(true)} disabled={config?.tipo_calculo_curva === 'GOMPERTZ'} className={`flex items-center gap-1 px-3 py-1 rounded-md transition-colors border ${config?.tipo_calculo_curva === 'GOMPERTZ' ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200'}`}>
                   <Edit2 className="w-4 h-4" /> Ajustar Metas e Curva
                 </button>
               ) : null}

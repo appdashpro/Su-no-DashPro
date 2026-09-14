@@ -7,6 +7,15 @@ import { Save, AlertCircle, Plus, Trash2, Settings, X, RotateCcw, Check, Edit2 }
 import { DEFAULT_MEDICAMENTOS_PERMITIDOS, DEFAULT_CAUSAS_MORTALIDADE, DEFAULT_TECNICOS, growthCurvesMisto, growthCurveFemea, defaultMetas, defaultMetasFemea } from '../data';
 import { getEmpresaConfigsLocal } from '../lib/storage';
 
+const defaultFasesGompertz = [
+  { fase: 'Alojamento', duracaoDias: 14 },
+  { fase: 'Crescimento 1', duracaoDias: 14 },
+  { fase: 'Crescimento 2', duracaoDias: 14 },
+  { fase: 'Crescimento 3', duracaoDias: 14 },
+  { fase: 'Terminação 1', duracaoDias: 14 },
+  { fase: 'Terminação 2', duracaoDias: 50 } // Remainder
+];
+
 interface EmpresaConfigGestaoProps {
   currentUser: UserProfile | null;
   empresas?: Empresa[];
@@ -22,7 +31,9 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
   const [success, setSuccess] = useState<string | null>(null);
 
   // Local state for simple fields
-  const [tipoCalculo, setTipoCalculo] = useState<'DIA_UM' | 'PESO_ALOJAMENTO'>('DIA_UM');
+  const [tipoCalculo, setTipoCalculo] = useState<'DIA_UM' | 'PESO_ALOJAMENTO' | 'GOMPERTZ'>('DIA_UM');
+  const [gompertzParams, setGompertzParams] = useState({ pm: 260, b: 0.012, em: 3780, pi: 22.00 });
+  const [fasesGompertz, setFasesGompertz] = useState(defaultFasesGompertz);
   const [metaMortalidade, setMetaMortalidade] = useState<number>(0);
   const [medicamentos, setMedicamentos] = useState<any[]>([]);
   const [causas, setCausas] = useState<string[]>([]);
@@ -134,6 +145,21 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
       if (activeData) {
         setConfig(activeData);
         setTipoCalculo(activeData.tipo_calculo_curva || 'DIA_UM');
+        const pData = activeData.curva_desempenho?.find((c: any) => c._type === 'PROGRAMA_ALIMENTAR');
+        const activePrograma = pData?.fases || activeData.programa_alimentar || [];
+        if (activePrograma.length > 0 && activePrograma[0].fase) {
+          setFasesGompertz(activePrograma);
+        } else {
+          setFasesGompertz(defaultFasesGompertz);
+        }
+        if (activeData.gompertz_params) {
+          setGompertzParams(activeData.gompertz_params);
+        } else if (activeData.curva_desempenho) {
+          const gParams = activeData.curva_desempenho.find((c: any) => c._type === 'GOMPERTZ_PARAMS');
+          if (gParams) {
+            setGompertzParams({ pm: gParams.pm, b: gParams.b, em: gParams.em, pi: gParams.pi || 22.00 });
+          }
+        }
         setMetaMortalidade(activeData.meta_mortalidade || 0);
         setMedicamentos((activeData.medicamentos_permitidos && activeData.medicamentos_permitidos.length > 0) ? activeData.medicamentos_permitidos : DEFAULT_MEDICAMENTOS_PERMITIDOS);
         setCausas((activeData.causas_mortalidade && activeData.causas_mortalidade.length > 0) ? activeData.causas_mortalidade : DEFAULT_CAUSAS_MORTALIDADE);
@@ -146,6 +172,7 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
       } else {
         setConfig(null);
         setTipoCalculo('DIA_UM');
+        setFasesGompertz(defaultFasesGompertz);
         setMetaMortalidade(0);
         setMedicamentos(DEFAULT_MEDICAMENTOS_PERMITIDOS);
         setCausas(DEFAULT_CAUSAS_MORTALIDADE);
@@ -170,16 +197,23 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
     setError(null);
     setSuccess(null);
 
-    const payload: Partial<EmpresaConfig> = {
+    const existingCurva = config?.curva_desempenho || [];
+    const curvaClean = existingCurva.filter((c: any) => c._type !== 'GOMPERTZ_PARAMS' && c._type !== 'PROGRAMA_ALIMENTAR');
+    
+    const gompertzData = { _type: 'GOMPERTZ_PARAMS', ...gompertzParams };
+    const pFases = (tipoCalculo === 'GOMPERTZ' && fasesGompertz.length > 0) ? fasesGompertz : (config?.programa_alimentar || []);
+    const programaData = { _type: 'PROGRAMA_ALIMENTAR', fases: pFases };
+
+    const newCurva = [...curvaClean, gompertzData, programaData];
+    
+    const payload: any = {
       empresa_id: selectedEmpresaId,
       tipo_calculo_curva: tipoCalculo,
       meta_mortalidade: metaMortalidade,
       medicamentos_permitidos: medicamentos,
       causas_mortalidade: causas,
       tecnicos: tecnicos,
-      // If config exists, preserve its JSON fields, otherwise default
-      curva_desempenho: config?.curva_desempenho || [],
-      programa_alimentar: config?.programa_alimentar || []
+      curva_desempenho: newCurva
     };
 
     try {
@@ -274,48 +308,31 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
           <select
             value={selectedEmpresaId}
             onChange={(e) => setSelectedEmpresaId(e.target.value)}
-            disabled={!isMaster && empresasList.length <= 1}
-            className="w-full sm:w-96 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-colors"
           >
             {empresasList.map(emp => (
               <option key={emp.id} value={emp.id}>{emp.nome}</option>
             ))}
           </select>
         </div>
-
-        {loading ? (
-          <div className="p-12 text-center text-slate-500">Carregando parâmetros...</div>
-        ) : (
-          <div className="p-6 space-y-8">
-            {error && (
-              <div className="p-4 bg-red-50 text-red-700 rounded-xl flex items-center gap-2">
-                <AlertCircle className="w-5 h-5" />
-                {error}
-              </div>
-            )}
-            {success && (
-              <div className="p-4 bg-emerald-50 text-emerald-700 rounded-xl flex items-center gap-2">
-                <AlertCircle className="w-5 h-5" />
-                {success}
-              </div>
-            )}
-
-            <div className="space-y-8">
-              {/* Ajustes e Metas */}
-              <div className="bg-slate-50/50 p-6 rounded-xl border border-slate-200/80">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">Lógica e Metas</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Tipo de Cálculo da Curva
-                    </label>
-                    <select
+        {config && (
+          <div className="space-y-6">
+            {/* Ajustes e Metas */}
+            <div className="bg-slate-50/50 p-6 rounded-xl border border-slate-200/80">
+              <h3 className="text-lg font-semibold text-slate-800 mb-4">Lógica e Metas</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Tipo de Cálculo da Curva
+                  </label>
+                  <select
                       value={tipoCalculo}
-                      onChange={(e) => setTipoCalculo(e.target.value as 'DIA_UM' | 'PESO_ALOJAMENTO')}
+                      onChange={(e) => setTipoCalculo(e.target.value as 'DIA_UM' | 'PESO_ALOJAMENTO' | 'GOMPERTZ')}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                     >
                       <option value="DIA_UM">Cronológico Padrão (Inicia no Dia 1)</option>
                       <option value="PESO_ALOJAMENTO">Deslocamento Inteligente (Pelo Peso de Alojamento)</option>
+                      <option value="GOMPERTZ">Gompertz Dinâmico (Modelo Bioenergético)</option>
                     </select>
                     <p className="text-xs text-slate-500 mt-1">
                       Define como o aplicativo exigirá metas de consumo e peso para os lotes deste cliente.
@@ -334,10 +351,56 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                     />
                   </div>
+                {tipoCalculo === 'GOMPERTZ' && (
+                                    <div className="col-span-1 sm:col-span-2 mt-4 grid grid-cols-1 sm:grid-cols-4 gap-4 border-t border-slate-200 pt-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Peso Maduro (Pm)
+                      </label>
+                      <input
+                        type="number" step="0.1"
+                        value={gompertzParams.pm}
+                        onChange={(e) => setGompertzParams(p => ({...p, pm: parseFloat(e.target.value) || 0}))}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Taxa Maturação (b)
+                      </label>
+                      <input
+                        type="number" step="0.001"
+                        value={gompertzParams.b}
+                        onChange={(e) => setGompertzParams(p => ({...p, b: parseFloat(e.target.value) || 0}))}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Energia Ração (EM)
+                      </label>
+                      <input
+                        type="number" step="1"
+                        value={gompertzParams.em}
+                        onChange={(e) => setGompertzParams(p => ({...p, em: parseInt(e.target.value) || 0}))}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Peso Inicial (Pi)
+                      </label>
+                      <input
+                        type="number" step="0.1"
+                        value={gompertzParams.pi || 22.0}
+                        onChange={(e) => setGompertzParams(p => ({...p, pi: parseFloat(e.target.value) || 0}))}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+                )}
                 </div>
               </div>
-
-
               {/* Listas Permitidas */}
               <div className="bg-slate-50/50 p-6 rounded-xl border border-slate-200/80">
                 <h3 className="text-lg font-semibold text-slate-800 mb-4">Listas Permitidas</h3>
@@ -543,7 +606,6 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
                   </div>
                 </div>
               </div>
-            </div>
 
               <div className="pt-6 border-t border-slate-100">
               <div className="flex items-center justify-between mb-4">
