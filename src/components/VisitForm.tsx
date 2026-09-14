@@ -324,7 +324,7 @@ if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') &
  
  const diffTime = visitDate.getTime() - alojamentoDate.getTime();
  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
- newData.idade = diffDays >= 0 ? diffDays : 0;
+ newData.idade = diffDays;
  }
  return newData;
  });
@@ -339,7 +339,7 @@ if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') &
   const currentConfig = configs.find((c: any) => c.empresa_id === (formData.empresaId || integrado?.empresaId));
   const currentIdade = Number(formData.idade) || 0;
   const finalMetaMortalidade = currentConfig?.meta_mortalidade !== undefined && currentConfig?.meta_mortalidade !== null ? currentConfig.meta_mortalidade : 3;
-  const propMetaMortalidade = currentIdade ? Number(((Math.min(currentIdade, 105) / 105) * finalMetaMortalidade).toFixed(2)) : finalMetaMortalidade;
+  const propMetaMortalidade = currentIdade > 0 ? Number(((Math.min(currentIdade, 105) / 105) * finalMetaMortalidade).toFixed(2)) : (currentIdade < 0 ? 0 : finalMetaMortalidade);
   const isOverMetaMortalidade = Number(formData.mortalidade || 0) > propMetaMortalidade;
  const activeCurve = getActiveCurve(integrado?.alojamentoDate, integrado?.status, formData.tipoLote as any, integrado?.fechamentoDate, currentConfig, initialData?.curva_consumo_id, formData.date);
  const resolvedCurvaId = activeCurve?.id;
@@ -529,10 +529,9 @@ if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') &
  <input 
  type="number" 
  name="idade"
- min="1"
  max="150"
  required
- value={formData.idade || ''}
+ value={formData.idade !== undefined && formData.idade !== null && formData.idade !== '' ? formData.idade : ''}
  onChange={handleChange}
  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
  />

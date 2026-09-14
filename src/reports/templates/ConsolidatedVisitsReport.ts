@@ -84,7 +84,7 @@ export const getConsolidatedVisitsTemplate = (
     const currentConfig = configs.find(c => c.empresa_id === integrado?.empresaId);
     
     const finalMetaMortalidade = currentConfig?.meta_mortalidade !== undefined && currentConfig?.meta_mortalidade !== null ? currentConfig.meta_mortalidade : 3;
-    const propMetaMortalidade = targetAge ? Number(((Math.min(targetAge, 105) / 105) * finalMetaMortalidade).toFixed(2)) : finalMetaMortalidade;
+    const propMetaMortalidade = targetAge > 0 ? Number(((Math.min(targetAge, 105) / 105) * finalMetaMortalidade).toFixed(2)) : (targetAge < 0 ? 0 : finalMetaMortalidade);
     const isMortAlerta = mortPercentNum > propMetaMortalidade;
     const mortColor = isMortAlerta ? '#ef4444' : '#10b981';
 
