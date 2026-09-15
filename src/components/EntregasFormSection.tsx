@@ -1,3 +1,4 @@
+import { safeStorage } from "../lib/safeStorage";
 import { generateUUID } from "../utils/uuid";
 import React, { useState, useEffect } from 'react';
 import { Package, Plus, Trash2, DollarSign } from 'lucide-react';
@@ -26,14 +27,14 @@ export function EntregasFormSection({ empresaId, entregas, onChange }: Props) {
   const loadCatalogo = async () => {
     setLoading(true);
     try {
-      const cached = localStorage.getItem(`catalogo_${empresaId}`);
+      const cached = safeStorage.getItem(`catalogo_${empresaId}`);
       if (cached) setCatalogo(JSON.parse(cached));
       
       if (navigator.onLine) {
         const { data } = await supabase.from('catalogo_produtos').select('*').eq('empresa_id', empresaId).eq('ativo', true);
         if (data) {
           setCatalogo(data);
-          localStorage.setItem(`catalogo_${empresaId}`, JSON.stringify(data));
+          safeStorage.setItem(`catalogo_${empresaId}`, JSON.stringify(data));
         }
       }
     } catch (e) {

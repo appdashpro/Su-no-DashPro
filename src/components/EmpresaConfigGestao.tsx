@@ -34,7 +34,7 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
   const [tipoCalculo, setTipoCalculo] = useState<'DIA_UM' | 'PESO_ALOJAMENTO' | 'GOMPERTZ'>('DIA_UM');
   const [gompertzParams, setGompertzParams] = useState({ pm: 260, b: 0.012, em: 3780, pi: 22.00 });
   const [fasesGompertz, setFasesGompertz] = useState(defaultFasesGompertz);
-  const [metaMortalidade, setMetaMortalidade] = useState<number>(0);
+  const [metaMortalidade, setMetaMortalidade] = useState<number | string>(0);
   const [medicamentos, setMedicamentos] = useState<any[]>([]);
   const [causas, setCausas] = useState<string[]>([]);
   const [tecnicos, setTecnicos] = useState<string[]>([]);
@@ -209,7 +209,7 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
     const payload: any = {
       empresa_id: selectedEmpresaId,
       tipo_calculo_curva: tipoCalculo,
-      meta_mortalidade: metaMortalidade,
+      meta_mortalidade: Number(metaMortalidade) || 0,
       medicamentos_permitidos: medicamentos,
       causas_mortalidade: causas,
       tecnicos: tecnicos,
@@ -347,7 +347,7 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
                       type="number"
                       step="0.1"
                       value={metaMortalidade}
-                      onChange={(e) => setMetaMortalidade(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setMetaMortalidade(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                     />
                   </div>
@@ -360,7 +360,7 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
                       <input
                         type="number" step="0.1"
                         value={gompertzParams.pm}
-                        onChange={(e) => setGompertzParams(p => ({...p, pm: parseFloat(e.target.value) || 0}))}
+                        onChange={(e) => setGompertzParams(p => ({...p, pm: e.target.value === '' ? '' : parseFloat(e.target.value)}))}
                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                       />
                     </div>
@@ -371,7 +371,7 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
                       <input
                         type="number" step="0.001"
                         value={gompertzParams.b}
-                        onChange={(e) => setGompertzParams(p => ({...p, b: parseFloat(e.target.value) || 0}))}
+                        onChange={(e) => setGompertzParams(p => ({...p, b: e.target.value === '' ? '' : parseFloat(e.target.value)}))}
                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                       />
                     </div>
@@ -382,7 +382,7 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
                       <input
                         type="number" step="1"
                         value={gompertzParams.em}
-                        onChange={(e) => setGompertzParams(p => ({...p, em: parseInt(e.target.value) || 0}))}
+                        onChange={(e) => setGompertzParams(p => ({...p, em: e.target.value === '' ? '' : parseInt(e.target.value)}))}
                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                       />
                     </div>
@@ -392,10 +392,35 @@ export function EmpresaConfigGestao({ currentUser, empresas = [] }: EmpresaConfi
                       </label>
                       <input
                         type="number" step="0.1"
-                        value={gompertzParams.pi || 22.0}
-                        onChange={(e) => setGompertzParams(p => ({...p, pi: parseFloat(e.target.value) || 0}))}
+                        value={gompertzParams.pi !== undefined ? gompertzParams.pi : 22.0}
+                        onChange={(e) => setGompertzParams(p => ({...p, pi: e.target.value === '' ? '' : parseFloat(e.target.value)}))}
                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                       />
+                    </div>
+                  </div>
+                )}
+                
+                {tipoCalculo === 'GOMPERTZ' && (
+                  <div className="mt-4 border-t border-slate-200 pt-4">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Programa Alimentar (Duração em Dias)</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {fasesGompertz.map((faseItem, idx) => (
+                        <div key={idx}>
+                          <label className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wide">{faseItem.fase}</label>
+                          <input
+                            type="number"
+                            min="0"
+                            disabled={!isMaster}
+                            value={faseItem.duracaoDias || ''}
+                            onChange={(e) => {
+                              const newFases = [...fasesGompertz];
+                              newFases[idx].duracaoDias = e.target.value === '' ? '' : parseInt(e.target.value);
+                              setFasesGompertz(newFases);
+                            }}
+                            className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-[#2D452B] outline-none disabled:bg-slate-50 disabled:text-slate-500"
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

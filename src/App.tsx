@@ -12,6 +12,8 @@ import { IntegradoDetailsModal } from './components/IntegradoDetailsModal';
 import { Integrados } from './components/Integrados';
 import { IntegradoForm } from './components/IntegradoForm';
 import { ReferenceCurve } from './components/ReferenceCurve';
+import { CopagriMigration } from './components/CopagriMigration';
+import { SystemCurvesMigration } from './components/SystemCurvesMigration';
 import { EmpresaConfigGestao } from './components/EmpresaConfigGestao';
 import { ImportData } from './components/ImportData';
 import { Login } from './components/Login';
@@ -873,6 +875,7 @@ if (loading) {
 
  return (
  <div className="flex h-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
+      <SystemCurvesMigration />
  {/* Mobile overlay */}
  {isSidebarOpen && (
  <div 

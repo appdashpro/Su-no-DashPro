@@ -267,7 +267,8 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
                  }
               }]);
            } else {
-              setCurvas(activeData.curva_desempenho);
+              let loadedCurvas = activeData.curva_desempenho.filter((c: any) => c._type !== 'GOMPERTZ_PARAMS' && c._type !== 'PROGRAMA_ALIMENTAR');
+              setCurvas(loadedCurvas);
            }
         } else {
           setCurvas([]);
@@ -311,23 +312,18 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
   
   const uniqueGroups = Array.from(new Set(curvas.map(c => c.dataVigencia))).map(dataVigencia => {
     const groupCurves = curvas.filter(c => c.dataVigencia === dataVigencia);
-    // Try to find a name that doesn't just describe the sex, or strip it
     let baseName = groupCurves[0].nome || 'Curva Padrão';
-    
-    // Simple heuristic: if name contains Misto, Macho, Femea, strip it
     const cleanName = baseName
       .replace(/\s*-\s*(misto|macho|fêmea|femea)/i, '')
       .replace(/\s+(misto|macho|fêmea|femea)/i, '')
-      .replace(/\s*\(.*?\)/g, '') // remove parens just in case
+      .replace(/\s*\(.*?\)/g, '')
       .trim();
-      
-    // If we stripped everything, fallback to the original
     const finalName = cleanName || baseName;
     return { key: dataVigencia, nome: finalName, dataVigencia };
   });
 
   const availableSexesForGroup = currentGroupKey 
-    ? curvas.filter(c => c.dataVigencia === currentGroupKey)
+    ? curvas.filter(c => c.dataVigencia === currentGroupKey).filter((c, index, self) => index === self.findIndex((t) => String(t.tipoLote || 'Misto').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() === String(c.tipoLote || 'Misto').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()))
     : [];
 
   const selectedCurva = currentCurva;
@@ -462,7 +458,7 @@ export function ReferenceCurve({ currentUser, empresas = [] }: ReferenceCurvePro
               >
                 {curvas.length === 0 ? <option value="">Nenhuma curva</option> : null}
                 {uniqueGroups.map(g => (
-                  <option key={g.key} value={g.key}>{g.nome} ({g.dataVigencia === 'Sempre' ? 'Sempre' : new Date(g.dataVigencia + 'T12:00:00').toLocaleDateString('pt-BR')}) {g.dataVigencia === activeDateKey ? (isEditing ? '(!)' : '✓ EM UTILIZAÇÃO') : ''}</option>
+                  <option key={g.key} value={g.key}>{g.nome} ({g.dataVigencia === 'Sempre' ? 'Sempre' : new Date(g.dataVigencia + 'T12:00:00').toLocaleDateString('pt-BR')}) {g.key === activeDateKey ? (isEditing ? '(!)' : '✓ EM UTILIZAÇÃO') : ''}</option>
                 ))}
               </select>
             </div>

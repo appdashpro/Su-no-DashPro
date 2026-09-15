@@ -1,17 +1,9 @@
 const fs = require('fs');
-let code = fs.readFileSync('src/components/EmpresaConfigGestao.tsx', 'utf8');
+let file;
 
-code = code.replace(
-  "value={editingMedicamento.custoPorKg}",
-  "value={editingMedicamento?.custoPorKg || ''}"
-);
-code = code.replace(
-  "onChange={e => setEditingMedicamento({...editingMedicamento, custoPorKg: e.target.value})}",
-  "onChange={e => editingMedicamento && setEditingMedicamento({...editingMedicamento, custoPorKg: e.target.value})}"
-);
-code = code.replace(
-  "newMeds[targetIdx] = { nome, custoPorKg: parseFloat(editingMedicamento.custoPorKg) || 0 };",
-  "newMeds[targetIdx] = { nome, custoPorKg: parseFloat(editingMedicamento?.custoPorKg || '0') || 0 };"
-);
+file = 'src/components/EmpresaConfigGestao.tsx';
+let content = fs.readFileSync(file, 'utf8');
+content = content.replace(/pm: parseFloat\(e.target.value\) \|\| 0/g, 'pm: parseFloat(e.target.value) || 0');
+fs.writeFileSync(file, content);
 
-fs.writeFileSync('src/components/EmpresaConfigGestao.tsx', code);
+console.log('Fixed');
