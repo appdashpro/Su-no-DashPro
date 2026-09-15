@@ -531,7 +531,7 @@ if ((name === 'date' || name === 'alojamentoDate' || name === 'integradoNome') &
  name="idade"
  max="150"
  required
- value={formData.idade !== undefined && formData.idade !== null && formData.idade !== '' ? formData.idade : ''}
+ value={formData.idade !== undefined && formData.idade !== null && String(formData.idade) !== '' ? formData.idade : ''}
  onChange={handleChange}
  className="w-full border border-slate-200 rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
  />

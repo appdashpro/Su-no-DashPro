@@ -1825,8 +1825,8 @@ export const getActiveCurve = (alojamentoDate?: string, status?: string, tipoLot
     const fases = pData?.fases || empresaConfig?.programa_alimentar || [];
     if (fases && fases.length > 0 && fases[0].fase) {
       let currentDay = 0;
-      const getMetaForPhase = (faseName) => {
-        const faseConfig = fases.find((f) => f.fase === faseName);
+      const getMetaForPhase = (faseName: string) => {
+        const faseConfig = fases.find((f: any) => f.fase === faseName);
         if (!faseConfig) return 0;
         let duration = faseConfig.duracaoDias || 0;
         let total = 0;

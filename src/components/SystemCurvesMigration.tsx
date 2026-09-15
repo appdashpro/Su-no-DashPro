@@ -23,7 +23,7 @@ export const SystemCurvesMigration = () => {
         // 1. Remove curves that do not belong to this company (if they were accidentally saved)
         // AND remove legacy 'v1'/'v2' from everyone
         const sysVersions = growthCurvesMisto.map(c => c.version);
-        const filteredCurvas = currentCurvas.filter(c => {
+        const filteredCurvas = currentCurvas.filter((c: any) => {
            // Remove old generic ones entirely from all companies to force a clean slate
            if (c.id === 'v1' || c.id === 'v2' || c.id === 'copagri_2026' || c.id === 'pastre_v1' || c.id === 'pastre_v2') {
                updated = true;
@@ -61,7 +61,7 @@ export const SystemCurvesMigration = () => {
            const matchesCompany = empName.includes(vCore);
            
            if (matchesCompany) {
-              const existingIndex = currentCurvas.findIndex(c => c.id === sysCurve.version);
+              const existingIndex = currentCurvas.findIndex((c: any) => c.id === sysCurve.version);
               if (existingIndex === -1) {
                  // Format a nice name
                  let displayName = `Curva ${vCore.toUpperCase()}`;

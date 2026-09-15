@@ -12,7 +12,6 @@ import { IntegradoDetailsModal } from './components/IntegradoDetailsModal';
 import { Integrados } from './components/Integrados';
 import { IntegradoForm } from './components/IntegradoForm';
 import { ReferenceCurve } from './components/ReferenceCurve';
-import { CopagriMigration } from './components/CopagriMigration';
 import { SystemCurvesMigration } from './components/SystemCurvesMigration';
 import { EmpresaConfigGestao } from './components/EmpresaConfigGestao';
 import { ImportData } from './components/ImportData';
