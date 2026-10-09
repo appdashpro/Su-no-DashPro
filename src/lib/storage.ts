@@ -413,26 +413,43 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
       let entregasDB: any[] = [];
 
       try {
-        const { data: vData, error: vErr } = await supabase.from('visitas').select('*, cargas_racao!fk_carg_visita(*), tratamentos!fk_trat_visita(*)').range(0, 9999);
+        const { data: vData, error: vErr } = await supabase.from('visitas').select('*').order('data_visita', { ascending: false }).limit(2000);
         if (vErr || !vData) {
-          const { data: fallbackV } = await supabase.from('visitas').select('*').range(0, 9999);
-          visitasDB = fallbackV || [];
-          const { data: cData } = await supabase.from('cargas_racao').select('*').range(0, 9999);
-          cargasDB = cData || [];
-          const { data: tData } = await supabase.from('tratamentos').select('*').range(0, 9999);
-          tratamentosDB = tData || [];
-        
+          console.warn("Failed fetching visitas:", vErr);
+          visitasDB = [];
         } else {
           visitasDB = vData;
+          const vIds = visitasDB.map(v => v.id);
+
+          // Fetch cargas_racao and tratamentos in fast parallel chunks by visita_id
+          if (vIds.length > 0) {
+            const chunkSize = 50;
+            const cargasPromises = [];
+            const tratPromises = [];
+
+            for (let i = 0; i < vIds.length; i += chunkSize) {
+              const chunk = vIds.slice(i, i + chunkSize);
+              cargasPromises.push(supabase.from('cargas_racao').select('*').in('visita_id', chunk));
+              tratPromises.push(supabase.from('tratamentos').select('*').in('visita_id', chunk));
+            }
+
+            const [cargasResults, tratResults] = await Promise.all([
+              Promise.all(cargasPromises),
+              Promise.all(tratPromises)
+            ]);
+
+            cargasDB = cargasResults.flatMap(r => r.data || []);
+            tratamentosDB = tratResults.flatMap(r => r.data || []);
+
+            // Attach cargas and tratamentos directly to each visita object for mapping
+            visitasDB.forEach(v => {
+              v.cargas_racao = cargasDB.filter((c: any) => c.visita_id === v.id || (!c.visita_id && c.lote_id === v.lote_id));
+              v.tratamentos = tratamentosDB.filter((t: any) => t.visita_id === v.id || (!t.visita_id && t.lote_id === v.lote_id));
+            });
+          }
         }
       } catch (err) {
-        console.warn('Fallback to separate table queries for visitas:', err);
-        const { data: fallbackV } = await supabase.from('visitas').select('*').range(0, 9999);
-        visitasDB = fallbackV || [];
-        const { data: cData } = await supabase.from('cargas_racao').select('*').range(0, 9999);
-        cargasDB = cData || [];
-        const { data: tData } = await supabase.from('tratamentos').select('*').range(0, 9999);
-        tratamentosDB = tData || [];
+        console.warn('Error during visitas sync:', err);
       }
 
       const currentLocalIntegrados = getIntegradosLocal();
@@ -482,13 +499,13 @@ const delIntQueue = parseQueueSafe(OFFLINE_DELETE_INTEGRADO_QUEUE);
 
         const vCargas = (v.cargas_racao && v.cargas_racao.length > 0) 
           ? v.cargas_racao 
-          : cargasDB.filter((c: any) => c.visita_id === v.id || c.lote_id === v.lote_id);
+          : cargasDB.filter((c: any) => c.visita_id === v.id || (!c.visita_id && c.lote_id === v.lote_id));
 
         const vEntregas = (v.visita_entregas && v.visita_entregas.length > 0) ? v.visita_entregas : entregasDB.filter((e: any) => e.visita_id === v.id);
 
         const vTratamentos = (v.tratamentos && v.tratamentos.length > 0)
           ? v.tratamentos
-          : tratamentosDB.filter((t: any) => t.visita_id === v.id || t.lote_id === v.lote_id);
+          : tratamentosDB.filter((t: any) => t.visita_id === v.id || (!t.visita_id && t.lote_id === v.lote_id));
 
         vCargas.forEach((c: any) => {
           volumeTotal += Number(c.quantidade_kg) || 0;

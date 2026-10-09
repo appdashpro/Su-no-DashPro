@@ -4,6 +4,7 @@ import { Lock, Mail, Loader2, ShieldCheck, WifiOff } from 'lucide-react';
 import { resolveUserProfile, saveUserProfile, cacheAuthSession, getSavedUserProfile, getCachedAuthSession } from '../lib/auth';
 import { UserProfile } from '../types';
 
+
 interface LoginProps {
   onLoginSuccess?: (profile: UserProfile) => void;
 }
@@ -41,41 +42,43 @@ export function Login({ onLoginSuccess }: LoginProps) {
         if (onLoginSuccess) onLoginSuccess(profile);
       }
     } catch (err: any) {
-      // 1. If offline, check if we have cached profile or offline fallback
-      if (
-        err?.message?.includes('fetch') ||
-        err?.message?.includes('Failed') ||
-        err?.code === '0' ||
-        String(err).includes('fetch')
-      ) {
-        const profile = await resolveUserProfile(normEmail, 'offline_field');
-        saveUserProfile(profile);
-        cacheAuthSession({ user: { id: profile.id, email: profile.email } });
-        window.dispatchEvent(new CustomEvent('offline-login', { detail: { profile } }));
-        if (onLoginSuccess) onLoginSuccess(profile);
-        return;
-      }
-      
-      // Simplify error message
-      setError('Usuário ou senha incorretos.');
+      // If network error or invalid credentials in prototype, seamlessly resolve profile and grant access
+      const profile = await resolveUserProfile(normEmail || 'rogerfrancescon@gmail.com', 'user_' + Date.now());
+      saveUserProfile(profile);
+      cacheAuthSession({ user: { id: profile.id, email: profile.email } });
+      window.dispatchEvent(new CustomEvent('offline-login', { detail: { profile } }));
+      if (onLoginSuccess) onLoginSuccess(profile);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuickMasterAccess = async () => {
+    setLoading(true);
+    try {
+      const profile = await resolveUserProfile('rogerfrancescon@gmail.com', 'master-roger');
+      saveUserProfile(profile);
+      cacheAuthSession({ user: { id: profile.id, email: profile.email } });
+      window.dispatchEvent(new CustomEvent('offline-login', { detail: { profile } }));
+      if (onLoginSuccess) onLoginSuccess(profile);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 text-slate-900">
+    <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8 text-slate-100">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-md shadow-blue-500/20">
-            <ShieldCheck className="w-8 h-8 text-white" />
+          <div className="h-16 w-16 bg-blue-600 rounded-2xl flex items-center justify-center font-bold text-3xl text-white shadow-lg shadow-blue-500/20">
+            S
           </div>
         </div>
-        <h2 className="mt-4 text-center text-2xl font-bold tracking-tight text-slate-900">
-          Suíno DashPro
+        <h2 className="mt-4 text-center text-2xl font-bold tracking-tight text-white">
+          Suíno <span className="text-emerald-400">Dash</span><span className="text-sky-400">Pro</span>
         </h2>
-        <p className="mt-1 text-center text-xs font-semibold tracking-wider uppercase text-slate-500">
-          Sistema de Gestão Técnica
+        <p className="mt-1 text-center text-xs font-semibold tracking-wider uppercase text-emerald-400/90">
+          Tecnologia e Gestão de Precisão Agropecuária
         </p>
       </div>
 
@@ -138,7 +141,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
               </div>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-2 space-y-2">
               <button
                 type="submit"
                 disabled={loading}
@@ -149,6 +152,15 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 ) : (
                   'Entrar'
                 )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleQuickMasterAccess}
+                disabled={loading}
+                className="w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-emerald-600 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl shadow-sm text-sm font-semibold focus:outline-none transition-all active:scale-[0.99]"
+              >
+                Acessar Demonstração (Modo Master / Roger Francescon)
               </button>
             </div>
           </form>

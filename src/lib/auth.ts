@@ -328,8 +328,7 @@ export async function saveUserWithPermissions(
     } else {
       currentList.push(updatedUser);
     }
-    const safeStorage = require('./safeStorage').safeStorage;
-    safeStorage.setItem('suino_dashpro_users_list', JSON.stringify(currentList));
+    safeStorage.setItem(USERS_LIST_KEY, JSON.stringify(currentList));
     
     return { success: true, authCreated, authError: authErrorMsg };
   } catch(e: any) {
@@ -369,6 +368,7 @@ export async function deleteUser(userId: string): Promise<boolean> {
  * - TECNICO_CLIENTE: sees only their assigned client/integrado
  */
 export function filterIntegradosForUser(integrados: Integrado[], user: UserProfile | null): Integrado[] {
+  if (!Array.isArray(integrados)) return [];
   if (!user || user.papel === 'MASTER' || user.papel === 'SUPER_ADMIN') {
     return integrados;
   }
@@ -376,15 +376,16 @@ export function filterIntegradosForUser(integrados: Integrado[], user: UserProfi
   // TECNICO_NUTRON or COORDENADOR
   if (user.papel === 'TECNICO_NUTRON' || user.papel === 'COORDENADOR') {
     if (user.clientes_permitidos && user.clientes_permitidos.length > 0) {
-      const filtered = integrados.filter(i => 
-        user.clientes_permitidos!.some(allowed => {
+      const filtered = integrados.filter(i => {
+        if (!i) return false;
+        return user.clientes_permitidos!.some(allowed => {
           if (!allowed) return false;
-          if (allowed === i.empresaId) return true;
-          const allowedNorm = allowed.toLowerCase().trim();
-          const nameNorm = i.name.toLowerCase().trim();
-          return allowed === i.id || allowedNorm === nameNorm || nameNorm.includes(allowedNorm) || allowedNorm.includes(nameNorm);
-        })
-      );
+          if (i.empresaId && allowed === i.empresaId) return true;
+          const allowedNorm = String(allowed).toLowerCase().trim();
+          const nameNorm = String(i.name || '').toLowerCase().trim();
+          return allowed === i.id || (nameNorm && (allowedNorm === nameNorm || nameNorm.includes(allowedNorm) || allowedNorm.includes(nameNorm)));
+        });
+      });
       return filtered;
     }
     return integrados;
@@ -394,17 +395,18 @@ export function filterIntegradosForUser(integrados: Integrado[], user: UserProfi
   if (user.papel === 'TECNICO_CLIENTE' || user.papel === 'TECNICO' || user.papel === 'ADMIN_EMPRESA') {
     let filtered = integrados;
     if (user.clientes_permitidos && user.clientes_permitidos.length > 0) {
-      filtered = integrados.filter(i => 
-        user.clientes_permitidos!.some(allowed => {
+      filtered = integrados.filter(i => {
+        if (!i) return false;
+        return user.clientes_permitidos!.some(allowed => {
           if (!allowed) return false;
-          if (allowed === i.empresaId) return true;
-          const allowedNorm = allowed.toLowerCase().trim();
-          const nameNorm = i.name.toLowerCase().trim();
-          return allowed === i.id || allowedNorm === nameNorm || nameNorm.includes(allowedNorm) || allowedNorm.includes(nameNorm);
-        })
-      );
+          if (i.empresaId && allowed === i.empresaId) return true;
+          const allowedNorm = String(allowed).toLowerCase().trim();
+          const nameNorm = String(i.name || '').toLowerCase().trim();
+          return allowed === i.id || (nameNorm && (allowedNorm === nameNorm || nameNorm.includes(allowedNorm) || allowedNorm.includes(nameNorm)));
+        });
+      });
     } else if (user.empresa_id) {
-      filtered = integrados.filter(i => i.empresaId === user.empresa_id);
+      filtered = integrados.filter(i => i && i.empresaId === user.empresa_id);
     } else {
       filtered = [];
     }
@@ -418,6 +420,7 @@ export function filterIntegradosForUser(integrados: Integrado[], user: UserProfi
  * Filter visits based on allowed integrados.
  */
 export function filterVisitsForUser(visits: Visit[], allowedIntegrados: Integrado[], user: UserProfile | null, isFilterActive: boolean = false): Visit[] {
+  if (!Array.isArray(visits)) return [];
   if (!isFilterActive && (!user || user.papel === 'MASTER' || user.papel === 'SUPER_ADMIN')) {
     return visits;
   }
@@ -426,15 +429,17 @@ export function filterVisitsForUser(visits: Visit[], allowedIntegrados: Integrad
     return [];
   }
 
-  const allowedIds = new Set(allowedIntegrados.map(i => i.id));
-  const allowedNames = new Set(allowedIntegrados.map(i => i.name.toLowerCase().trim()));
+  const allowedIds = new Set(allowedIntegrados.map(i => i?.id).filter(Boolean));
+  const allowedNames = new Set(allowedIntegrados.map(i => String(i?.name || '').toLowerCase().trim()).filter(Boolean));
 
   return visits.filter(v => {
-    if (allowedIds.has(v.integradoId)) return true;
+    if (!v) return false;
+    if (v.integradoId && allowedIds.has(v.integradoId)) return true;
     const match = allowedIntegrados.find(i => {
-      const normName = i.name.toLowerCase().replace(/\s+/g, '');
-      const normVId = (v.integradoId || '').toLowerCase().replace(/\s+/g, '');
-      return normVId.includes(normName) || normName.includes(normVId) || allowedNames.has(normVId);
+      if (!i) return false;
+      const normName = String(i.name || '').toLowerCase().replace(/\s+/g, '');
+      const normVId = String(v.integradoId || '').toLowerCase().replace(/\s+/g, '');
+      return (normName && (normVId.includes(normName) || normName.includes(normVId))) || (normVId && allowedNames.has(normVId));
     });
     return !!match;
   });

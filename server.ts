@@ -111,6 +111,144 @@ async function startServer() {
     }
   });
 
+  // ============================================================================
+  // SECURE SYNC API: FAST, RELIABLE DATA SYNC PREVENTING RLS TIMEOUTS
+  // ============================================================================
+  app.get("/api/sync", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized: Missing Token" });
+      }
+
+      const token = authHeader.split(" ")[1];
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://cnemtndccfppibecjuep.supabase.co';
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      if (!serviceRoleKey) {
+        return res.status(500).json({ error: "Server Configuration Error: Missing Service Role Key" });
+      }
+
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      });
+
+      // 1. Verify caller token
+      const { data: { user: callerUser }, error: verifyError } = await supabaseAdmin.auth.getUser(token);
+      if (verifyError || !callerUser) {
+        return res.status(401).json({ error: "Unauthorized: Invalid Token" });
+      }
+
+      const normEmail = (callerUser.email || '').trim().toLowerCase();
+      const isMasterEmail = [
+        'rogerfrancescon@gmail.com',
+        'admin@nutron.com.br',
+        'admin@suinodashpro.com'
+      ].includes(normEmail);
+
+      // 2. Fetch user profile and permissions
+      let { data: userProfile } = await supabaseAdmin
+        .from('usuarios')
+        .select('*')
+        .or(`auth_uid.eq.${callerUser.id},email.eq.${normEmail}`)
+        .maybeSingle();
+
+      const isMaster = isMasterEmail || userProfile?.papel === 'MASTER' || userProfile?.papel === 'SUPER_ADMIN';
+
+      let allowedEmpresaIds: string[] | null = null; // null = all allowed
+
+      if (!isMaster) {
+        const permitted = new Set<string>();
+        if (userProfile?.empresa_id && userProfile.empresa_id !== '00000000-0000-0000-0000-000000000000') {
+          permitted.add(userProfile.empresa_id);
+        }
+        if (userProfile?.integrado_padrao_id) {
+          permitted.add(userProfile.integrado_padrao_id);
+        }
+
+        if (userProfile?.id) {
+          const { data: permData } = await supabaseAdmin
+            .from('usuario_empresas_permitidas')
+            .select('empresa_id')
+            .eq('usuario_id', userProfile.id);
+          if (permData && permData.length > 0) {
+            permData.forEach(p => permitted.add(p.empresa_id));
+          }
+        }
+
+        const isNutron = userProfile?.papel === 'TECNICO_NUTRON' || userProfile?.papel === 'COORDENADOR';
+        if (isNutron && permitted.size === 0) {
+          // Unrestricted Nutron can see all
+          allowedEmpresaIds = null;
+        } else {
+          allowedEmpresaIds = Array.from(permitted);
+        }
+      }
+
+      // Helper for paginated fetch to guarantee all rows without 1000 limit or timeouts
+      async function fetchPaginated(table: string, filterEmpresas: string[] | null = null) {
+        let all: any[] = [];
+        let from = 0;
+        const limit = 1000;
+        while (true) {
+          let query = supabaseAdmin.from(table).select('*').range(from, from + limit - 1);
+          if (filterEmpresas && filterEmpresas.length > 0) {
+            query = query.in('empresa_id', filterEmpresas);
+          }
+          const { data, error } = await query;
+          if (error || !data || data.length === 0) break;
+          all.push(...data);
+          if (data.length < limit) break;
+          from += limit;
+        }
+        return all;
+      }
+
+      // 3. Parallel fetch using supabaseAdmin
+      const [
+        empresas,
+        configs,
+        lotes,
+        integrados,
+        visitas,
+        cargas,
+        tratamentos
+      ] = await Promise.all([
+        supabaseAdmin.from('empresas').select('*').eq('ativo', true).order('nome').then(r => r.data || []),
+        supabaseAdmin.from('empresa_configuracoes').select('*').then(r => r.data || []),
+        fetchPaginated('lotes', allowedEmpresaIds),
+        fetchPaginated('integrados', allowedEmpresaIds),
+        fetchPaginated('visitas', allowedEmpresaIds),
+        fetchPaginated('cargas_racao', allowedEmpresaIds),
+        fetchPaginated('tratamentos', allowedEmpresaIds)
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        empresas,
+        configs,
+        lotes,
+        integrados,
+        visitas,
+        cargas,
+        tratamentos,
+        allowedEmpresas: allowedEmpresaIds,
+        userProfile: userProfile ? {
+          id: userProfile.id,
+          auth_uid: userProfile.auth_uid,
+          email: userProfile.email,
+          nome: userProfile.nome,
+          papel: isMaster ? 'MASTER' : userProfile.papel,
+          empresa_id: userProfile.empresa_id,
+          clientes_permitidos: allowedEmpresaIds || []
+        } : null
+      });
+    } catch (err: any) {
+      console.error("Sync API Error:", err);
+      return res.status(500).json({ error: "Failed to sync data: " + (err.message || String(err)) });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

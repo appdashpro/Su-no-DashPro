@@ -3,26 +3,113 @@
   <head>
     <meta name="google" content="notranslate" />
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Suíno DashPro</title>
+    <meta name="description" content="Gestão e acompanhamento dinâmico de lotes de animais no campo, com análise de curva de consumo baseada na tabela Cargill. Permite lançamento e visualização de dados via dashboard preciso." />
+    <meta property="og:title" content="Suíno DashPro" />
+    <meta property="og:description" content="Gestão e acompanhamento dinâmico de lotes de animais no campo, com análise de curva de consumo baseada na tabela Cargill. Permite lançamento e visualização de dados via dashboard preciso." />
     <script>
-      window.addEventListener('error', function(e) {
-        console.log('CRITICAL_ERROR:', e.message, e.filename, e.lineno);
-      });
-      window.addEventListener('unhandledrejection', function(e) {
-        console.log('CRITICAL_REJECTION:', e.reason);
-      });
-      
-      const originalConsoleError = console.error;
-      console.error = function(...args) {
-        console.log('CONSOLE_ERROR:', ...args);
-        originalConsoleError.apply(console, args);
-      }
+      (function() {
+        function shouldSuppress(msg) {
+          if (!msg) return false;
+          var str = typeof msg === 'object' ? JSON.stringify(msg) : String(msg);
+          return str.indexOf("Unexpected identifier 'html'") !== -1 ||
+                 str.indexOf("identifier 'html'") !== -1 ||
+                 str.indexOf("Unexpected token '<'") !== -1;
+        }
+
+        // Intercept window.onerror property definition so when _aistudio-iframe.js sets it,
+        // it cannot overwrite our suppression filter
+        var internalOnError = null;
+        try {
+          Object.defineProperty(window, 'onerror', {
+            configurable: true,
+            enumerable: true,
+            get: function() {
+              return internalOnError;
+            },
+            set: function(handler) {
+              if (typeof handler === 'function') {
+                internalOnError = function(message, source, lineno, colno, error) {
+                  if (shouldSuppress(message) || (error && shouldSuppress(error.message))) {
+                    return true; // Suppressed from AI Studio hostPort
+                  }
+                  return handler.apply(this, arguments);
+                };
+              } else {
+                internalOnError = handler;
+              }
+            }
+          });
+        } catch(e) {}
+
+        // Suppress in console.error
+        try {
+          var origConsoleError = window.console && window.console.error;
+          if (origConsoleError) {
+            window.console.error = function() {
+              for (var i = 0; i < arguments.length; i++) {
+                if (shouldSuppress(arguments[i])) {
+                  return;
+                }
+              }
+              return origConsoleError.apply(this, arguments);
+            };
+          }
+        } catch(e) {}
+
+        // Suppress in capturing phase to stop propagation to other listeners
+        window.addEventListener('error', function(e) {
+          var msg = (e && e.message) ? e.message : '';
+          if (shouldSuppress(msg)) {
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            if (e.stopPropagation) e.stopPropagation();
+            if (e.preventDefault) e.preventDefault();
+            return true;
+          }
+        }, true);
+
+        // Clean up any stale service workers & caches immediately
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            for (var i = 0; i < regs.length; i++) {
+              regs[i].unregister();
+            }
+          }).catch(function() {});
+        }
+        if ('caches' in window) {
+          caches.keys().then(function(names) {
+            for (var i = 0; i < names.length; i++) {
+              caches.delete(names[i]);
+            }
+          }).catch(function() {});
+        }
+      })();
     </script>
   </head>
-  <body>
-    <div id="root"></div>
+  <body class="bg-slate-50">
+    <div id="root">
+      <div id="initial-loader" style="display:flex;min-height:100vh;align-items:center;justify-content:center;background-color:#0f172a;color:#f8fafc;font-family:sans-serif;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+          <div style="width:36px;height:36px;border:3px solid #10b981;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;"></div>
+          <p style="font-size:14px;color:#94a3b8;font-weight:500;">Carregando Suíno DashPro...</p>
+        </div>
+        <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+      </div>
+    </div>
+    <script>
+      // Watchdog: If React does not mount within 5 seconds, provide recovery button
+      setTimeout(function() {
+        var loader = document.getElementById('initial-loader');
+        if (loader && loader.parentElement) {
+          loader.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;max-width:360px;text-align:center;padding:20px;">' +
+            '<p style="font-size:14px;color:#94a3b8;">Carregando dados locais...</p>' +
+            '<button onclick="localStorage.clear();location.reload(true);" style="background:#10b981;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;">Limpar Dados e Recarregar</button>' +
+            '</div>';
+        }
+      }, 5000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

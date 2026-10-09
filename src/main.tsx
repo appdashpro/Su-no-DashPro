@@ -1,16 +1,32 @@
 import { StrictMode, Component, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { safeStorage } from "./lib/safeStorage";
-import { registerSW } from 'virtual:pwa-register';
 import App from './App.tsx';
 import './index.css';
 
+// Force clean-up any cached service workers and cache storage to prevent blank screen problems in the user's browser
 if ('serviceWorker' in navigator) {
-  try {
-    registerSW({ immediate: true });
-  } catch (e) {
-    console.error('SW registration failed:', e);
-  }
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      registration.unregister().then(() => {
+        console.log('Old Service Worker unregistered successfully.');
+      });
+    }
+  }).catch((err) => {
+    console.warn('Error fetching service worker registrations:', err);
+  });
+}
+
+if ('caches' in window) {
+  caches.keys().then((keyList) => {
+    return Promise.all(keyList.map((key) => {
+      return caches.delete(key).then(() => {
+        console.log('Cleared cache storage:', key);
+      });
+    }));
+  }).catch((err) => {
+    console.warn('Error clearing caches:', err);
+  });
 }
 
 class ErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean, error: Error | null}> {

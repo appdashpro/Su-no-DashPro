@@ -3,6 +3,7 @@ import { Home, Activity, Users, ClipboardList, LineChart, AlertCircle, HelpCircl
 import { cn } from '../lib/utils';
 import { UserProfile, getRoleLabel } from '../types';
 
+
 interface SidebarProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
@@ -41,13 +42,15 @@ export function Sidebar({ currentTab, setCurrentTab, onStartTutorial, userProfil
   return (
     <aside className="w-64 bg-[#0F172A] flex flex-col h-full shrink-0 border-r border-slate-800">
       <div className="p-5 pb-3">
-        <div className="flex items-center gap-2.5 mb-5">
-          <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white shadow-md shadow-blue-500/20">
-            S
-          </div>
-          <div>
-            <span className="text-white font-semibold text-base tracking-tight block">Suíno DashPro</span>
-            <span className="text-[10px] text-slate-400 font-medium">Gestão Agropecuária</span>
+        <div className="mb-5">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white shadow-md shadow-blue-500/20">
+              S
+            </div>
+            <div>
+              <span className="text-white font-semibold text-base tracking-tight block">Suíno DashPro</span>
+              <span className="text-[10px] text-slate-400 font-medium">Gestão Agropecuária</span>
+            </div>
           </div>
         </div>
 
@@ -59,9 +62,18 @@ export function Sidebar({ currentTab, setCurrentTab, onStartTutorial, userProfil
               <div className="flex items-center justify-between gap-1 pl-1">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMaster ? 'bg-purple-400' : isNutron ? 'bg-blue-400' : 'bg-emerald-400'}`}></div>
-                  <span className="text-xs font-semibold text-slate-300 truncate" title={userProfile.papel === 'TECNICO_CLIENTE' || userProfile.papel === 'TECNICO' ? (/^t[é|e]cnico\s+/i.test(userProfile.nome) ? userProfile.nome : `Técnico ${userProfile.nome}`) : userProfile.nome}>
-                    {userProfile.papel === 'TECNICO_CLIENTE' || userProfile.papel === 'TECNICO' ? (/^t[é|e]cnico\s+/i.test(userProfile.nome) ? userProfile.nome : `Técnico ${userProfile.nome}`) : userProfile.nome}
-                  </span>
+                  {(() => {
+                    const userName = userProfile?.nome || 'Usuário';
+                    const isTecnicoRole = userProfile?.papel === 'TECNICO_CLIENTE' || userProfile?.papel === 'TECNICO';
+                    const displayName = isTecnicoRole
+                      ? (/^t[é|e]cnico\s+/i.test(userName) ? userName : `Técnico ${userName}`)
+                      : userName;
+                    return (
+                      <span className="text-xs font-semibold text-slate-300 truncate" title={displayName}>
+                        {displayName}
+                      </span>
+                    );
+                  })()}
                 </div>
                 {(userProfile.papel === 'MASTER' || userProfile.papel === 'TECNICO_NUTRON' || userProfile.papel === 'COORDENADOR') && (
                   <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider opacity-90 shrink-0", getBadgeStyle())}>

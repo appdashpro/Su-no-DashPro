@@ -884,7 +884,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
           </div>
           
           <div className="flex-1 min-h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
               <ComposedChart data={chartData} margin={{ top: 10, right: 10, bottom: 20, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                 <XAxis dataKey="idade" type="number" domain={[1, 100]} tickCount={10} label={{ value: 'Idade (Dias)', position: 'insideBottom', offset: -10 }} stroke="#94a3b8" fontSize={11} tick={{fill: '#64748b'}} />
@@ -992,7 +992,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
             </div>
           </div>
           <div className="flex-1 min-h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
               <ComposedChart margin={{ top: 20, right: 20, bottom: 20, left: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis 
@@ -1063,7 +1063,7 @@ export function Dashboard({ visits, integrados, onNavigateToVisit }: DashboardPr
             <p className="text-xs text-slate-500 mt-1">Comparativo de fuga (+/- kg) da última visita</p>
           </div>
           <div className="flex-1 min-h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
               <BarChart data={latestVisitsData} margin={{ top: 20, right: 20, bottom: 50, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                 <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} angle={-45} textAnchor="end" tick={{fill: '#64748b'}} interval={0} />

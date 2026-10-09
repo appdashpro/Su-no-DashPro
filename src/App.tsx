@@ -19,6 +19,8 @@ import { Login } from './components/Login';
 import { Notifications } from './components/Notifications';
 import { MedicationAnalysis } from './components/MedicationAnalysis';
 import { UsuariosGestao } from './components/UsuariosGestao';
+
+
 import { Visit, Integrado, UserProfile, getRoleLabel } from './types';
 import { Menu, X, LogOut, Download, Wifi, WifiOff, RefreshCw, Moon, Sun, Users, ClipboardList, Shield } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -411,19 +413,29 @@ export default function App() {
 
  const updatedIntegrados = integrados.map(i => {
  if (i.status === 'Em andamento' && i.alojamentoDate) {
- const [year, month, day] = i.alojamentoDate.split('-');
- const alojamento = new Date(Number(year), Number(month) - 1, Number(day));
+ let alojamento: Date | null = null;
+ if (i.alojamentoDate.includes('-')) {
+   const [year, month, day] = i.alojamentoDate.split('-');
+   alojamento = new Date(Number(year), Number(month) - 1, Number(day));
+ } else if (i.alojamentoDate.includes('/')) {
+   const [day, month, year] = i.alojamentoDate.split('/');
+   alojamento = new Date(Number(year), Number(month) - 1, Number(day));
+ } else {
+   alojamento = new Date(i.alojamentoDate);
+ }
  
- const diffTime = today.getTime() - alojamento.getTime();
- const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
- 
- if (diffDays > 110) {
- hasChanges = true;
- return { 
- ...i, 
- status: 'Fechado' as const, 
- fechamentoDate: new Date().toISOString().split('T')[0] 
- };
+ if (alojamento && !isNaN(alojamento.getTime())) {
+   const diffTime = today.getTime() - alojamento.getTime();
+   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+   
+   if (diffDays > 110) {
+   hasChanges = true;
+   return { 
+   ...i, 
+   status: 'Fechado' as const, 
+   fechamentoDate: new Date().toISOString().split('T')[0] 
+   };
+   }
  }
  }
  return i;
@@ -835,8 +847,11 @@ export default function App() {
  const handleLogout = useCallback(async () => {
    clearAuthCache();
    setCurrentUserProfile(null);
-    setMasterUserProfile(null);
+   setMasterUserProfile(null);
    setSession(null);
+   setIntegrados([]);
+   setVisits([]);
+   setSelectedEmpresaFilter(null);
    try {
      await supabase.auth.signOut();
    } catch (e) {
@@ -906,10 +921,14 @@ if (loading) {
  >
  <Menu className="w-6 h-6" />
  </button>
+ <div className="md:hidden">
+   <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white shadow-md">S</div>
+ </div>
  <h1 id="header-title" className="text-lg md:text-xl font-bold text-slate-800 truncate">{getPageTitle()}</h1>
  </div>
 
  <div className="flex items-center gap-2 shrink-0">
+ 
  {visibleEmpresas.length > 1 && (
    <div className="hidden sm:flex items-center mr-2">
      <select
