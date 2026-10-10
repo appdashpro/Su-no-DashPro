@@ -1,32 +1,25 @@
 import { StrictMode, Component, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
 import { safeStorage } from "./lib/safeStorage";
 import App from './App.tsx';
 import './index.css';
 
-// Force clean-up any cached service workers and cache storage to prevent blank screen problems in the user's browser
+// Register PWA Service Worker for offline-first and installability
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (const registration of registrations) {
-      registration.unregister().then(() => {
-        console.log('Old Service Worker unregistered successfully.');
-      });
-    }
-  }).catch((err) => {
-    console.warn('Error fetching service worker registrations:', err);
-  });
-}
-
-if ('caches' in window) {
-  caches.keys().then((keyList) => {
-    return Promise.all(keyList.map((key) => {
-      return caches.delete(key).then(() => {
-        console.log('Cleared cache storage:', key);
-      });
-    }));
-  }).catch((err) => {
-    console.warn('Error clearing caches:', err);
-  });
+  try {
+    registerSW({
+      immediate: true,
+      onNeedRefresh() {
+        console.log('Nova versão do Suíno DashPro disponível.');
+      },
+      onOfflineReady() {
+        console.log('Suíno DashPro pronto para uso offline.');
+      }
+    });
+  } catch (err) {
+    console.warn('Falha no registro do Service Worker:', err);
+  }
 }
 
 class ErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean, error: Error | null}> {

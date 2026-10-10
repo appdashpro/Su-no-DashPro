@@ -9,6 +9,12 @@
     <meta name="description" content="Gestão e acompanhamento dinâmico de lotes de animais no campo, com análise de curva de consumo baseada na tabela Cargill. Permite lançamento e visualização de dados via dashboard preciso." />
     <meta property="og:title" content="Suíno DashPro" />
     <meta property="og:description" content="Gestão e acompanhamento dinâmico de lotes de animais no campo, com análise de curva de consumo baseada na tabela Cargill. Permite lançamento e visualização de dados via dashboard preciso." />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Suíno DashPro" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <script>
       (function() {
         function shouldSuppress(msg) {
@@ -69,22 +75,6 @@
             return true;
           }
         }, true);
-
-        // Clean up any stale service workers & caches immediately
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.getRegistrations().then(function(regs) {
-            for (var i = 0; i < regs.length; i++) {
-              regs[i].unregister();
-            }
-          }).catch(function() {});
-        }
-        if ('caches' in window) {
-          caches.keys().then(function(names) {
-            for (var i = 0; i < names.length; i++) {
-              caches.delete(names[i]);
-            }
-          }).catch(function() {});
-        }
       })();
     </script>
   </head>

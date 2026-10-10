@@ -29,6 +29,8 @@ jobs:
         uses: actions/configure-pages@v4
       - name: Build
         run: npm run build
+        env:
+          BUILD_FOR_GH_PAGES: "true"
       - name: Verify build output
         run: ls -la dist/
       - name: Upload artifact
